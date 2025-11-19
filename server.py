@@ -4,7 +4,8 @@ import math
 import random
 import time
 import websockets
-import os   # חשוב!
+import os
+from aiohttp import web   # ⭐ חשוב: שרת HTTP קטן
 
 MAX_PLAYERS = 6
 TICK_RATE = 30
@@ -115,11 +116,22 @@ class Game:
 
 game = Game()
 
+# ⭐ HTTP server so Render will detect the app is alive
+async def health(request):
+    return web.Response(text="OK")
+
+def create_http_app():
+    app = web.Application()
+    app.router.add_get("/", health)
+    return app
+
+
 async def handle_client(ws):
     pid = None
     try:
         join_raw = await ws.recv()
         join_msg = json.loads(join_raw)
+
         if join_msg.get("type") != "join":
             await ws.close()
             return
@@ -154,6 +166,7 @@ async def handle_client(ws):
         game.remove_player(ws)
         await game.broadcast(game.get_state())
 
+
 async def game_loop():
     while True:
         now = time.time()
@@ -163,11 +176,24 @@ async def game_loop():
         await game.broadcast(game.get_state())
         await asyncio.sleep(1 / TICK_RATE)
 
+
 async def main():
-    PORT = int(os.environ.get("PORT", 10000))   # ⭐ Render chooses the port!
+
+    PORT = int(os.environ.get("PORT", 10000))   # ⭐ Render chooses this port
+
+    # ---- Start HTTP (health check) on same port ----
+    http_app = create_http_app()
+    runner = web.AppRunner(http_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    print(f"HTTP server running on port {PORT}")
+
+    # ---- Start WebSocket server on same port ----
     async with websockets.serve(handle_client, "0.0.0.0", PORT):
-        print(f"Server running on port {PORT}")
+        print(f"WebSocket server running on port {PORT}")
         await game_loop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
