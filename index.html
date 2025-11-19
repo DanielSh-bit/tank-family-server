@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>Tank Family</title>
+
+  <!-- הופך לאפליקציה אמיתית -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- הפעלה כאפליקציה מלאה (PWA) -->
+  <meta name="theme-color" content="#111111">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111;
+      color: #eee;
+      overflow: hidden; /* אין גלילה */
+      touch-action: none; /* אין זום/מחוות */
+      font-family: Arial;
+    }
+
+    #gameCanvas {
+      background: #333;
+      display: none;
+      margin: 0 auto;
+    }
+    #lobby { display: none; }
+
+    #joystickArea {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      border: 2px solid #888;
+      touch-action: none;
+    }
+
+    #fireBtn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: #c33;
+      color: #fff;
+      font-size: 20px;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="login">
+  <h2>Tank Family</h2>
+  <input id="nameInput" placeholder="הכנס שם" />
+  <button id="joinBtn">הצטרף</button>
+</div>
+
+<div id="lobby">
+  <h3>לובי</h3>
+  <div id="playersList"></div>
+  <p>מחכים לשחקנים נוספים...</p>
+</div>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<div id="joystickArea"></div>
+<button id="fireBtn">FIRE</button>
+
+<script>
+let ws;
+let myId = null;
+let dir = {x: 0, y: 0};
+let firePressed = false;
+let state = null;
+
+const loginDiv = document.getElementById('login');
+const lobbyDiv = document.getElementById('lobby');
+const playersList = document.getElementById('playersList');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const joy = document.getElementById('joystickArea');
+const fireBtn = document.getElementById('fireBtn');
+
+fireBtn.style.display = 'none';
+joy.style.display = 'none';
+
+document.getElementById('joinBtn').onclick = () => {
+  const nameInput = document.getElementById('nameInput');
+  let name = nameInput.value.trim();
+  if (!name) name = "Player";
+
+  const saved = localStorage.getItem('tank_name');
+  if (!saved) localStorage.setItem('tank_name', name);
+  else name = saved;
+
+  ws = new WebSocket("wss://TEMP_URL");
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({type: "join", name}));
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "joined") {
+      myId = msg.id;
+      loginDiv.style.display = 'none';
+      lobbyDiv.style.display = 'block';
+    } else if (msg.type === "state") {
+      state = msg;
+      renderLobby();
+      if (Object.keys(msg.players).length >= 2) {
+        lobbyDiv.style.display = 'none';
+        canvas.style.display = 'block';
+        joy.style.display = 'block';
+        fireBtn.style.display = 'block';
+      }
+    }
+  };
+};
+
+function renderLobby() {
+  if (!state) return;
+  let html = '';
+  for (const [pid, p] of Object.entries(state.players)) {
+    html += `<div style="color:${p.color}">${p.name}</div>`;
+  }
+  playersList.innerHTML = html;
+}
+
+// ==================================================
+// GAME RENDER
+// ==================================================
+
+function renderGame() {
+  if (!state) {
+    requestAnimationFrame(renderGame);
+    return;
+  }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for (const [pid, p] of Object.entries(state.players)) {
+    drawTank(p.x, p.y, p.angle, p.color, p.alive);
+  }
+  requestAnimationFrame(renderGame);
+}
+
+function drawTank(x, y, angle, color, alive) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = alive ? color : "#555";
+  ctx.fillRect(-15,-10,30,20);
+  ctx.fillRect(0,-4,20,8);
+  ctx.restore();
+}
+
+// ==================================================
+// JOYSTICK
+// ==================================================
+
+let joyActive = false;
+let joyCenter = {x: 0, y: 0};
+
+function joyStart(ev) {
+  joyActive = true;
+  const rect = joy.getBoundingClientRect();
+  joyCenter = {x: rect.left + rect.width/2, y: rect.top + rect.height/2};
+}
+
+function joyMove(ev) {
+  if (!joyActive) return;
+  const touch = ev.touches ? ev.touches[0] : ev;
+  const dx = touch.clientX - joyCenter.x;
+  const dy = touch.clientY - joyCenter.y;
+  const r = Math.sqrt(dx*dx + dy*dy) || 1;
+  const maxR = 60;
+  const k = Math.min(r, maxR) / r;
+  dir.x = (dx * k) / maxR;
+  dir.y = (dy * k) / maxR;
+}
+
+function joyEnd(ev) {
+  joyActive = false;
+  dir.x = 0;
+  dir.y = 0;
+}
+
+joy.addEventListener('mousedown', joyStart);
+joy.addEventListener('mousemove', joyMove);
+joy.addEventListener('mouseup', joyEnd);
+joy.addEventListener('mouseleave', joyEnd);
+joy.addEventListener('touchstart', (e)=>{e.preventDefault(); joyStart(e);},{passive:false});
+joy.addEventListener('touchmove', (e)=>{e.preventDefault(); joyMove(e);},{passive:false});
+joy.addEventListener('touchend', (e)=>{e.preventDefault(); joyEnd(e);},{passive:false});
+
+// FIRE
+fireBtn.onmousedown = () => firePressed = true;
+fireBtn.onmouseup = () => firePressed = false;
+fireBtn.ontouchstart = (e)=>{e.preventDefault(); firePressed = true;};
+fireBtn.ontouchend =   (e)=>{e.preventDefault(); firePressed = false;};
+
+// SEND INPUT
+setInterval(() => {
+  if (!ws || ws.readyState !== 1 || !myId) return;
+  ws.send(JSON.stringify({
+    type: "input",
+    dir,
+    fire: firePressed
+  }));
+}, 50);
+
+requestAnimationFrame(renderGame);
+</script>
+
+<!-- רישום SW -->
+<script>
+window.addEventListener('load', () => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered', reg))
+      .catch(err => console.log('SW registration failed', err));
+  }
+});
+</script>
+
+
+
+</body>
+</html>
