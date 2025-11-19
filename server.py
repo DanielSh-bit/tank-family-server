@@ -3,15 +3,15 @@ import json
 import math
 import random
 import time
-import websockets  # pip install websockets
+import websockets
+import os   # חשוב!
 
 MAX_PLAYERS = 6
-TICK_RATE = 30          # ticks per second
-PLAYER_SPEED = 150.0    # מהירות טנק בפיקסלים לשניה
-ROT_SPEED = 3.0         # מהירות סיבוב ברדיאנים לשניה
+TICK_RATE = 30
+PLAYER_SPEED = 150.0
+ROT_SPEED = 3.0
 
 COLORS = ["red", "green", "blue", "pink", "black", "orange"]
-
 
 class Player:
     def __init__(self, pid, name, color):
@@ -29,11 +29,10 @@ class Player:
         self.deaths = 0
         self.games = 0
 
-
 class Game:
     def __init__(self):
-        self.players = {}      # pid -> Player
-        self.sockets = {}      # websocket -> pid
+        self.players = {}
+        self.sockets = {}
         self.colors_free = set(COLORS)
         self.round_running = False
         self.last_tick = time.time()
@@ -73,6 +72,7 @@ class Game:
 
         if not self.colors_free:
             return None, "NO_COLORS"
+
         color = random.choice(list(self.colors_free))
         self.colors_free.remove(color)
 
@@ -112,11 +112,8 @@ class Game:
             forward = -p.dir_y
             p.x += math.cos(p.angle) * PLAYER_SPEED * forward * dt
             p.y += math.sin(p.angle) * PLAYER_SPEED * forward * dt
-            # TODO: בהמשך נוסיף קירות / גבולות
-
 
 game = Game()
-
 
 async def handle_client(ws):
     pid = None
@@ -126,12 +123,14 @@ async def handle_client(ws):
         if join_msg.get("type") != "join":
             await ws.close()
             return
+
         name = join_msg.get("name", "Player")
         player, err = game.add_player(ws, name)
         if err:
             await ws.send(json.dumps({"type": "error", "reason": err}))
             await ws.close()
             return
+
         pid = player.id
         await ws.send(json.dumps({
             "type": "joined",
@@ -143,8 +142,7 @@ async def handle_client(ws):
 
         async for raw in ws:
             msg = json.loads(raw)
-            t = msg.get("type")
-            if t == "input":
+            if msg.get("type") == "input":
                 dx = float(msg.get("dir", {}).get("x", 0.0))
                 dy = float(msg.get("dir", {}).get("y", 0.0))
                 fire = bool(msg.get("fire", False))
@@ -156,7 +154,6 @@ async def handle_client(ws):
         game.remove_player(ws)
         await game.broadcast(game.get_state())
 
-
 async def game_loop():
     while True:
         now = time.time()
@@ -166,11 +163,11 @@ async def game_loop():
         await game.broadcast(game.get_state())
         await asyncio.sleep(1 / TICK_RATE)
 
-
 async def main():
-    async with websockets.serve(handle_client, "0.0.0.0", 8765):
+    PORT = int(os.environ.get("PORT", 10000))   # ⭐ Render chooses the port!
+    async with websockets.serve(handle_client, "0.0.0.0", PORT):
+        print(f"Server running on port {PORT}")
         await game_loop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
