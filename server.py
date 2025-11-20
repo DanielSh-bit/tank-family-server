@@ -4,6 +4,7 @@ import math
 import random
 import time
 from aiohttp import web, WSMsgType
+import os
 
 # --- הגדרות המשחק ---
 TANK_SPEED = 2.0
@@ -441,7 +442,7 @@ async def init_app():
     """מאתחל את יישום ה-aiohttp ומגדיר את הניתובים."""
     app = web.Application()
     # הניתוב הבסיסי לטיפול ב-WebSocket
-    app.router.add_get('/', websocket_handler)
+    app.router.add_get('/ws', websocket_handler)
 
     # הפעלת לולאת המשחק ברקע
     asyncio.create_task(game_loop())
@@ -450,6 +451,6 @@ async def init_app():
 
 
 if __name__ == '__main__':
-    # מריץ את השרת על פורט 8000
-    print("Starting Tank Battle Server on ws://0.0.0.0:8000")
-    web.run_app(init_app(), host='0.0.0.0', port=8000)
+    PORT = int(os.environ.get("PORT", 8000))
+    print(f"Starting Tank Battle Server on ws://0.0.0.0:{PORT}")
+    web.run_app(init_app(), host='0.0.0.0', port=PORT)
