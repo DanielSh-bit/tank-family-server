@@ -380,6 +380,7 @@ async def websocket_handler(request):
 
         # עדכון הלובי לאחר ניתוק
         await broadcast_lobby_state()
+    return ws
 
 
 # --- לולאת משחק ראשית (פועלת ברקע) ---
