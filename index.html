@@ -437,12 +437,24 @@
 				return;
 			}
 
-			ws.send(JSON.stringify({
-				type: "join",
-				username: loggedInUser,
-				color: selectedColor
-			}));
+			// פותחים WS חדש
+			ws = new WebSocket("wss://tank-family-server.onrender.com/ws");
+
+			ws.onopen = () => {
+				console.log("WS connected!");
+
+				// שולחים JOIN רק אחרי שהחיבור פתוח
+				ws.send(JSON.stringify({
+					type: "join",
+					username: loggedInUser,
+					color: selectedColor
+				}));
+			};
+
+			// להוסיף מאזין הודעות
+			setupWebSocketHandlers();
 		};
+
 
 		function showLobbyScreen(joinMsg) {
 			// החביאו את כל שאר המסכים

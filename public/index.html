@@ -293,22 +293,27 @@
 		function handleLogin(username, password) {
 			const user = users.find(u => u.username === username && u.password === password);
 
-			if (user) {
-				loggedInUser = username;
-				localStorage.setItem(SESSION_STORAGE_KEY, username);
-
-				displayMessage('התחברת בהצלחה!', 'success');
-
-				// מעבר למסך בחירת הצבע
-				setTimeout(() => {
-					showColorSelectScreen();
-				}, 500);
-
-			} else {
-				// כניסה נכשלה
+			if (!user) {
 				displayMessage('שם משתמש או סיסמה שגויים.', 'error');
+				return;
 			}
+
+			// שמירת session בדפדפן
+			loggedInUser = username;
+			localStorage.setItem(SESSION_STORAGE_KEY, username);
+
+			displayMessage('התחברת בהצלחה!', 'success');
+
+			// פותחים WebSocket רק עכשיו (אחרי התחברות)
+			ws = new WebSocket("wss://tank-family-server.onrender.com/ws");
+
+			ws.onopen = () => {
+				console.log("WS connected!");
+				setupWebSocketHandlers();   // רישום listeners
+				showColorSelectScreen();    // מעבר למסך בחירת צבע
+			};
 		}
+
 
 
         /**
@@ -348,46 +353,42 @@
         /**
          * טוען נתונים ומאתחל את האפליקציה.
          */
-        function init() {
+		function init() {
 
-			ws = new WebSocket("wss://tank-family-server.onrender.com/ws");
+			// 1. טעינת נתוני המשתמשים
+			loadUsers();
 
-			ws.onopen = () => {
-				console.log("WS connected");
-				setupWebSocketHandlers();
-			};
-            // 1. טעינת נתוני המשתמשים
-            loadUsers();
+			// 2. בדיקת סשן קיים
+			loggedInUser = localStorage.getItem(SESSION_STORAGE_KEY);
 
-            // 2. בדיקת סשן קיים
-            loggedInUser = localStorage.getItem(SESSION_STORAGE_KEY);
+			// 3. הגדרת אירוע של טופס login/register
+			authForm.addEventListener('submit', function(e) {
+				e.preventDefault();
+				messageBox.classList.add('hidden'); // הסתרת הודעה קודמת
 
-            // 3. הגדרת אירועים
-            authForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                messageBox.classList.add('hidden'); // הסתר הודעה קודמת
-                
-                const username = usernameInput.value.trim();
-                const password = passwordInput.value.trim();
+				const username = usernameInput.value.trim();
+				const password = passwordInput.value.trim();
 
-                if (username.length === 0 || password.length === 0) {
-                     displayMessage('שם משתמש וסיסמה אינם יכולים להיות ריקים.', 'error');
-                     return;
-                }
+				if (username.length === 0 || password.length === 0) {
+					displayMessage('שם משתמש וסיסמה אינם יכולים להיות ריקים.', 'error');
+					return;
+				}
 
-                if (isRegisterMode) {
-                    handleRegister(username, password);
-                } else {
-                    handleLogin(username, password);
-                }
-            });
+				if (isRegisterMode) {
+					handleRegister(username, password);
+				} else {
+					handleLogin(username, password);  
+					// ← כאן login יפתח WebSocket ויתקדם למסך בחירת צבע
+				}
+			});
 
-            switchModeButton.addEventListener('click', toggleMode);
-            logoutButton.addEventListener('click', handleLogout);
+			switchModeButton.addEventListener('click', toggleMode);
+			logoutButton.addEventListener('click', handleLogout);
 
-            // 4. הצגת התצוגה הנכונה
-            renderView();
-        }
+			// 4. הצגת התצוגה הנכונה
+			renderView();
+		}
+
 
         // הפעלת האפליקציה לאחר טעינת כל האלמנטים
         window.onload = init;
@@ -443,6 +444,8 @@
 				color: selectedColor
 			}));
 		};
+
+
 
 		function showLobbyScreen(joinMsg) {
 			// החביאו את כל שאר המסכים
