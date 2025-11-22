@@ -2,47 +2,16 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מלחמת טנקים רבת משתתפים</title>
-    <!-- טעינת Tailwind CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tank Family</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- טעינת Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInWithCustomToken, 
-            signInAnonymously, 
-            onAuthStateChanged,
-            createUserWithEmailAndPassword,
-            signInWithEmailAndPassword
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            doc, 
-            setDoc, 
-            getDoc 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // הגדרות גלובליות לגישה בתוך הסקריפט
-        window.firebase = {
-            initializeApp, 
-            getAuth, 
-            signInWithCustomToken, 
-            signInAnonymously,
-            createUserWithEmailAndPassword,
-            signInWithEmailAndPassword,
-            onAuthStateChanged,
-            getFirestore, 
-            doc, 
-            setDoc, 
-            getDoc 
-        };
-        
-        // קריאת משתני הסביבה הגלובליים
-        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.firebase = { initializeApp, getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, getFirestore, doc, setDoc, getDoc };
         window.__firebase_config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap');
@@ -51,731 +20,532 @@
             font-family: 'Heebo', sans-serif;
             margin: 0;
             padding: 0;
-            /* שימוש בתמונת הרקע intro.png כפי שביקשת */
-            background-image: url('intro.png');
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            background-attachment: fixed;
-            min-height: 100vh;
+            touch-action: none; /* מניעת גלילה במובייל */
+        }
+
+        /* --- מסך כניסה --- */
+        #auth-screen {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* הגדרת תמונת הרקע למסך כניסה */
+            background-image: url('intro.png'); 
+            background-size: cover;
+        }
+
+        .auth-box {
+            background: rgba(0, 0, 0, 0.6); /* רקע כהה חצי שקוף כדי שהטקסט יהיה קריא */
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            width: 300px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* --- מסך לובי --- */
+        #lobby-screen {
+            width: 100%;
+            height: 100%;
+            display: none; /* מוסתר בהתחלה */
+            position: relative;
+            /* הגדרת תמונת הרקע ללובי */
+            background-image: url('loby.png'); 
+            background-size: cover;
+        }
+
+        #stats-container {
+            position: absolute;
+            top: 20%;
+            left: 20px; /* סטטיסטיקה בצד שמאל */
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            width: 200px;
+            text-align: right;
+        }
+
+        #play-button-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px; /* כפתור משחק בצד ימין למטה */
+        }
+
+        /* --- מסך משחק --- */
+        #game-screen {
+            display: none; /* מוסתר בהתחלה */
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #222; /* רקע למשחק עצמו */
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* בקרים: ג'ויסטיק ימין, אש שמאל (הפוך מהרגיל, לפי בקשה) */
+        .controls-overlay {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            height: 150px;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            box-sizing: border-box;
+        }
+
+        /* ג'ויסטיק בצד ימין */
+        #joystick-area {
+            pointer-events: auto;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+            order: 2; /* מזיז אותו לימין בפלקס */
+        }
+
+        #stick {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* כפתור ירי בצד שמאל */
+        #fire-btn {
+            pointer-events: auto;
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 50, 50, 0.5);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-weight: bold;
             display: flex;
             justify-content: center;
             align-items: center;
-        }
-
-        #app-container {
-            backdrop-filter: blur(5px);
-            background-color: rgba(17, 24, 39, 0.8); /* רקע כהה שקוף מעט */
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            width: 100%;
-            max-width: 800px;
-            min-height: 80vh;
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        #game-area, #lobby-area {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            font-size: 18px;
+            order: 1; /* מזיז אותו לשמאל בפלקס */
+            margin-top: 15px;
         }
         
-        #game-canvas {
-            border: 4px solid #4ade80;
-            border-radius: 0.5rem;
-            background-color: #1f2937;
-            touch-action: none; /* חיוני למשחקיות בטאץ' */
+        #fire-btn:active { background: rgba(255, 50, 50, 0.8); }
+
+        /* עיצוב שדות הקלט */
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            color: black;
+            font-size: 16px;
         }
         
-        .tank-button {
-            transition: all 0.1s ease-in-out;
+        button.action-btn {
+            width: 100%;
+            padding: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        button.play-btn {
+            padding: 20px 40px;
+            background: linear-gradient(45deg, #FF5722, #FF9800);
+            color: white;
+            border: 3px solid white;
+            border-radius: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
             cursor: pointer;
         }
+        
+        button.play-btn:active { transform: scale(0.95); }
 
-        .tank-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-        }
+        #loading-msg { color: yellow; display: none; margin-top: 10px; }
+        .error-msg { color: #ff6b6b; font-size: 14px; margin-bottom: 10px; display: none; }
 
-        .tank-button:active {
-            transform: translateY(1px);
-        }
     </style>
 </head>
 <body>
 
-<div id="app-container" class="text-white p-6 md:p-10">
-    <h1 class="text-4xl font-bold mb-6 text-green-400">מלחמת טנקים</h1>
-    <div id="loader" class="hidden text-center">
-        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500"></div>
-        <p class="mt-2">טוען...</p>
+    <!-- 1. מסך כניסה (רקע intro.png) -->
+    <div id="auth-screen">
+        <div class="auth-box">
+            <h1 class="text-3xl font-bold text-white mb-4">ברוכים הבאים</h1>
+            <p class="text-gray-300 mb-4 text-sm">הכנס שם וסיסמה כדי להתחיל</p>
+            
+            <input type="text" id="username" placeholder="שם משתמש (לדוגמה: דניאל)" autocomplete="off">
+            <input type="number" id="password" placeholder="סיסמה (מספרים בלבד)" inputmode="numeric">
+            
+            <p id="auth-error" class="error-msg"></p>
+            <button class="action-btn" id="login-btn">כניסה / יצירה</button>
+            <p id="loading-msg">בודק פרטים...</p>
+        </div>
     </div>
 
-    <!-- ---------------------------------------------------- -->
-    <!-- 1. מסך אימות (Auth) - כניסה והרשמה -->
-    <!-- ---------------------------------------------------- -->
-    <div id="auth-area" class="w-full max-w-sm">
-        <h2 id="auth-title" class="text-2xl font-semibold mb-4 text-center">כניסה</h2>
-        <div id="auth-error-message" class="hidden p-2 mb-4 text-sm font-medium text-red-100 bg-red-600 rounded-lg text-center"></div>
+    <!-- 2. מסך לובי (רקע loby.png) -->
+    <div id="lobby-screen">
+        <!-- סטטיסטיקה בצד שמאל -->
+        <div id="stats-container">
+            <h3 class="text-xl border-b pb-2 mb-2">שלום <span id="display-name" class="text-green-400"></span></h3>
+            <p>הריגות: <span id="stat-kills">0</span></p>
+            <p>ניצחונות: <span id="stat-wins">0</span></p>
+            <br>
+            <p class="text-xs text-gray-400">מחוברים: <span id="online-count">0</span></p>
+        </div>
 
-        <form id="auth-form" class="space-y-4">
-            <div>
-                <label for="email" class="block text-sm font-medium text-gray-300">אימייל (שם משתמש)</label>
-                <input type="email" id="email" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-green-500 focus:ring-green-500">
-            </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-300">סיסמה</label>
-                <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-green-500 focus:ring-green-500">
-            </div>
-            <button id="auth-submit-btn" type="submit" class="w-full py-2 px-4 bg-green-600 hover:bg-green-700 rounded-md text-white font-semibold tank-button">התחבר</button>
-        </form>
+        <!-- כפתור משחק בצד ימין למטה -->
+        <div id="play-button-container">
+            <button class="play-btn" id="start-match-btn">שחק!</button>
+        </div>
+    </div>
+
+    <!-- 3. מסך משחק (ג'ויסטיק ימין, ירי שמאל) -->
+    <div id="game-screen">
+        <canvas id="gameCanvas"></canvas>
         
-        <div class="mt-4 text-center">
-            <button id="toggle-auth-btn" class="text-sm text-green-400 hover:text-green-300 transition duration-150 ease-in-out">
-                אין לך חשבון? לחץ כאן להרשמה
-            </button>
-        </div>
-    </div>
-
-
-    <!-- ---------------------------------------------------- -->
-    <!-- 2. מסך לובי (Lobby) -->
-    <!-- ---------------------------------------------------- -->
-    <div id="lobby-area" class="hidden w-full">
-        <h2 class="text-2xl font-semibold mb-4">לובי: <span id="player-welcome-name"></span></h2>
-        <p id="lobby-status" class="text-lg mb-4 text-yellow-400"></p>
-        
-        <button id="start-game-btn" class="tank-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg mb-6 disabled:opacity-50" disabled>
-            התחל משחק (מינימום 2 שחקנים)
-        </button>
-
-        <div class="w-full max-w-md bg-gray-700 p-4 rounded-lg shadow-lg">
-            <h3 class="text-xl font-medium mb-3 border-b border-gray-600 pb-2">שחקנים מחוברים (<span id="player-count">0</span>)</h3>
-            <ul id="players-list" class="space-y-2">
-                <!-- רשימת השחקנים תופיע כאן -->
-            </ul>
-        </div>
-        <button id="logout-btn" class="mt-6 text-sm text-red-400 hover:text-red-300 transition duration-150 ease-in-out">
-            התנתק
-        </button>
-    </div>
-
-    <!-- ---------------------------------------------------- -->
-    <!-- 3. מסך משחק (Game) -->
-    <!-- ---------------------------------------------------- -->
-    <div id="game-area" class="hidden">
-        <div id="game-info" class="mb-4 text-center">
-            <p class="text-xl text-green-400 font-bold">מצב משחק: <span id="game-state-display">משחק</span></p>
-            <p class="text-sm text-gray-400">הריגות שלך: <span id="my-kills">0</span></p>
-        </div>
-        <canvas id="game-canvas" width="600" height="600"></canvas>
-        <div id="joystick-container" class="mt-4 p-4 bg-gray-800 rounded-full shadow-inner">
-            <p class="text-sm text-gray-400 mb-2">שליטה בטנק:</p>
-            <div class="grid grid-cols-3 gap-2 w-40 h-40">
-                <div class="col-start-2">
-                    <button id="up-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▲</button>
-                </div>
-                <div class="flex items-center justify-end">
-                    <button id="left-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">◀</button>
-                </div>
-                <div class="flex items-center justify-center">
-                    <!-- מרכז ריק -->
-                </div>
-                <div class="flex items-center justify-start">
-                    <button id="right-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▶</button>
-                </div>
-                <div class="col-start-2">
-                    <button id="down-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▼</button>
-                </div>
+        <div class="controls-overlay">
+            <!-- כפתור ירי (שמאל - order 1) -->
+            <div id="fire-btn">אש</div>
+            
+            <!-- ג'ויסטיק (ימין - order 2) -->
+            <div id="joystick-area">
+                <div id="stick"></div>
             </div>
-            <button id="fire-btn" class="mt-4 w-full py-3 bg-red-600 hover:bg-red-700 rounded-full text-white font-bold tank-button">
-                אש!
-            </button>
         </div>
-        
-        <button id="back-to-lobby-btn" class="mt-6 text-sm text-yellow-400 hover:text-yellow-300 transition duration-150 ease-in-out hidden">
-            חזור ללובי
-        </button>
     </div>
-</div>
 
-<script type="module">
-    // ----------------------------------------------------------------------------------
-    // הגדרת משתנים גלובליים ו-Firebase
-    // ----------------------------------------------------------------------------------
+    <script type="module">
+        // --- הגדרות שרת ---
+        const RENDER_SERVER_DOMAIN = "tank-family-server.onrender.com";
+        const SERVER_URL = `wss://${RENDER_SERVER_DOMAIN}/ws`;
+        const APP_ID = window.__app_id || 'default';
 
-    let firebaseApp, auth, db;
-    let userId = null; // ה-UID של המשתמש המחובר
-    let playerName = null; // שם המשתמש מ-Firestore
-    
-    // קבועים
-    const RENDER_SERVER_DOMAIN = "tank-family-server.onrender.com"; // יש לשנות לדומיין שלך!
-    const SERVER_URL = `wss://${RENDER_SERVER_DOMAIN}/ws`; 
-    const USERS_COLLECTION_PATH = 'artifacts/' + window.__app_id + '/users/';
-    const APP_ID = window.__app_id;
+        // --- משתנים ---
+        let app, auth, db;
+        let currentUser = null;
+        let ws = null;
+        let myPlayerId = null;
+        let gameData = { players: {}, bullets: [] };
+        
+        // אלמנטים
+        const screens = {
+            auth: document.getElementById('auth-screen'),
+            lobby: document.getElementById('lobby-screen'),
+            game: document.getElementById('game-screen')
+        };
+        
+        const inputs = {
+            user: document.getElementById('username'),
+            pass: document.getElementById('password'),
+            btn: document.getElementById('login-btn'),
+            err: document.getElementById('auth-error'),
+            load: document.getElementById('loading-msg')
+        };
 
-    // מצב האפליקציה: 'auth', 'lobby', 'game'
-    let appState = 'auth';
+        const lobby = {
+            name: document.getElementById('display-name'),
+            kills: document.getElementById('stat-kills'),
+            wins: document.getElementById('stat-wins'),
+            online: document.getElementById('online-count'),
+            playBtn: document.getElementById('start-match-btn')
+        };
 
-    // משתני WebSocket ומשחק
-    let ws = null;
-    let myPlayerId = null; // ה-ID שקיבלתי מהשרת (שונה מ-userId של Firebase)
-    let gameData = { players: {}, bullets: [] };
-    
-    // אלמנטי DOM
-    const elements = {
-        loader: document.getElementById('loader'),
-        authArea: document.getElementById('auth-area'),
-        lobbyArea: document.getElementById('lobby-area'),
-        gameArea: document.getElementById('game-area'),
-        authTitle: document.getElementById('auth-title'),
-        authForm: document.getElementById('auth-form'),
-        authSubmitBtn: document.getElementById('auth-submit-btn'),
-        toggleAuthBtn: document.getElementById('toggle-auth-btn'),
-        authError: document.getElementById('auth-error-message'),
-        playerWelcomeName: document.getElementById('player-welcome-name'),
-        lobbyStatus: document.getElementById('lobby-status'),
-        startGameBtn: document.getElementById('start-game-btn'),
-        playersList: document.getElementById('players-list'),
-        playerCount: document.getElementById('player-count'),
-        logoutBtn: document.getElementById('logout-btn'),
-        canvas: document.getElementById('game-canvas'),
-        gameStateDisplay: document.getElementById('game-state-display'),
-        myKills: document.getElementById('my-kills'),
-        backToLobbyBtn: document.getElementById('back-to-lobby-btn'),
-        // לחצני שליטה (קיצורי דרך)
-        upBtn: document.getElementById('up-btn'),
-        downBtn: document.getElementById('down-btn'),
-        leftBtn: document.getElementById('left-btn'),
-        rightBtn: document.getElementById('right-btn'),
-        fireBtn: document.getElementById('fire-btn'),
-    };
-    
-    const ctx = elements.canvas.getContext('2d');
-    
-    let isRegisterMode = false;
-
-    // קלט משחק
-    const inputState = { 
-        x: 0, 
-        y: 0, 
-        angle: 0,
-        fire: false
-    };
-
-    // ----------------------------------------------------------------------------------
-    // פונקציות עזר ו-UI
-    // ----------------------------------------------------------------------------------
-
-    /** מעביר את מצב התצוגה של האפליקציה */
-    function setAppState(newState) {
-        appState = newState;
-        elements.authArea.classList.add('hidden');
-        elements.lobbyArea.classList.add('hidden');
-        elements.gameArea.classList.add('hidden');
-        elements.backToLobbyBtn.classList.add('hidden');
-        elements.loader.classList.add('hidden');
-
-        switch (newState) {
-            case 'auth':
-                elements.authArea.classList.remove('hidden');
-                document.body.style.backgroundImage = "url('intro.png')";
-                break;
-            case 'lobby':
-                elements.lobbyArea.classList.remove('hidden');
-                document.body.style.backgroundImage = "none";
-                document.body.style.backgroundColor = "#1f2937"; // רקע אפור כהה למשחק
-                break;
-            case 'game':
-                elements.gameArea.classList.remove('hidden');
-                elements.backToLobbyBtn.classList.remove('hidden');
-                document.body.style.backgroundImage = "none";
-                document.body.style.backgroundColor = "#1f2937";
-                break;
-            case 'loading':
-                elements.loader.classList.remove('hidden');
-                break;
-        }
-    }
-    
-    /** מציג הודעת שגיאה בטופס האימות */
-    function displayAuthError(message) {
-        elements.authError.textContent = message;
-        elements.authError.classList.remove('hidden');
-        setTimeout(() => {
-            elements.authError.classList.add('hidden');
-        }, 5000);
-    }
-    
-    // ----------------------------------------------------------------------------------
-    // לוגיקת אימות (Authentication)
-    // ----------------------------------------------------------------------------------
-    
-    /** שמירת שם המשתמש ב-Firestore */
-    async function savePlayerName(uid, name) {
+        // --- 1. אתחול Firebase ---
         try {
-            const userDocRef = firebase.doc(db, USERS_COLLECTION_PATH + uid + '/profile/data', 'user_data');
-            await firebase.setDoc(userDocRef, { name: name, uid: uid }, { merge: true });
-            console.log("Player name saved to Firestore.");
-        } catch (error) {
-            console.error("Error saving player name:", error);
-            // אם כישלון, אנו עדיין ממשיכים, אך ייתכן שהסטטיסטיקות לא ישמרו.
+            app = firebase.initializeApp(window.__firebase_config);
+            auth = firebase.getAuth(app);
+            db = firebase.getFirestore(app);
+        } catch (e) {
+            console.error("Firebase Error", e);
         }
-    }
-    
-    /** שליפת שם המשתמש מ-Firestore */
-    async function getPlayerName(uid) {
-        try {
-            const userDocRef = firebase.doc(db, USERS_COLLECTION_PATH + uid + '/profile/data', 'user_data');
-            const docSnap = await firebase.getDoc(userDocRef);
-            if (docSnap.exists() && docSnap.data().name) {
-                return docSnap.data().name;
+
+        // --- 2. לוגיקת אימות (פשוטה וחכמה) ---
+        inputs.btn.addEventListener('click', async () => {
+            const username = inputs.user.value.trim();
+            const pin = inputs.pass.value.trim();
+
+            if (username.length < 2 || pin.length < 4) {
+                showError("שם לפחות 2 תווים, סיסמה לפחות 4 ספרות");
+                return;
             }
-        } catch (error) {
-            console.error("Error fetching player name:", error);
-        }
-        return null;
-    }
-    
-    /** מטפל בכניסה או יצירת חשבון */
-    async function handleAuth(e) {
-        e.preventDefault();
-        setAppState('loading');
-        
-        const email = elements.authForm.email.value;
-        const password = elements.authForm.password.value;
-        
-        try {
-            if (isRegisterMode) {
-                // יצירת משתמש חדש
-                const userCredential = await firebase.createUserWithEmailAndPassword(auth, email, password);
-                userId = userCredential.user.uid;
-                // שמירת שם משתמש ראשוני (שם חלק האימייל)
-                const defaultName = email.split('@')[0];
-                await savePlayerName(userId, defaultName);
-                playerName = defaultName;
-                console.log("User registered successfully:", userId);
 
-            } else {
-                // כניסת משתמש קיים
-                const userCredential = await firebase.signInWithEmailAndPassword(auth, email, password);
-                userId = userCredential.user.uid;
-                playerName = await getPlayerName(userId);
-                if (!playerName) {
-                    playerName = email.split('@')[0];
+            // יצירת אימייל פיקטיבי מאחורי הקלעים
+            const fakeEmail = `${username}@tank.game`; 
+            
+            inputs.load.style.display = 'block';
+            inputs.err.style.display = 'none';
+            inputs.btn.disabled = true;
+
+            try {
+                // ניסיון כניסה רגיל
+                await firebase.signInWithEmailAndPassword(auth, fakeEmail, pin);
+                console.log("Logged in existing user");
+            } catch (error) {
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                    // אם משתמש לא קיים -> ניצור אותו אוטומטית!
+                    try {
+                        await firebase.createUserWithEmailAndPassword(auth, fakeEmail, pin);
+                        console.log("Created new user");
+                        // שמירת השם ב-Firestore
+                        const uid = auth.currentUser.uid;
+                        await firebase.setDoc(firebase.doc(db, `artifacts/${APP_ID}/users/${uid}/profile/data`, 'info'), {
+                            username: username,
+                            kills: 0,
+                            wins: 0
+                        });
+                    } catch (createErr) {
+                        showError("שגיאה ביצירת משתמש (אולי הסיסמה חלשה?)");
+                        inputs.btn.disabled = false;
+                        inputs.load.style.display = 'none';
+                        return;
+                    }
+                } else {
+                    showError("סיסמה שגויה או בעיית רשת");
+                    inputs.btn.disabled = false;
+                    inputs.load.style.display = 'none';
+                    return;
                 }
-                console.log("User signed in successfully:", userId);
             }
-            
-            // הצלחה: המשך למערכת ה-WebSocket
-            setAppState('lobby');
-            elements.playerWelcomeName.textContent = playerName;
-            connectToServer(playerName);
-
-        } catch (error) {
-            console.error("Auth Error:", error);
-            let errorMessage = "שגיאת אימות. אנא ודא שהאימייל והסיסמה נכונים.";
-            if (error.code === 'auth/email-already-in-use') {
-                errorMessage = "האימייל כבר קיים במערכת. נסה להיכנס.";
-            } else if (error.code === 'auth/invalid-email') {
-                errorMessage = "פורמט אימייל לא חוקי.";
-            } else if (error.code === 'auth/weak-password') {
-                errorMessage = "הסיסמה חלשה מדי (מינימום 6 תווים).";
-            }
-            displayAuthError(errorMessage);
-            setAppState('auth');
-        }
-    }
-    
-    /** מטפל בהתנתקות */
-    function handleLogout() {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.close();
-        }
-        auth.signOut();
-        userId = null;
-        playerName = null;
-        setAppState('auth');
-    }
-
-    // ----------------------------------------------------------------------------------
-    // לוגיקת WebSocket
-    // ----------------------------------------------------------------------------------
-
-    function connectToServer(name) {
-        if (ws) {
-            ws.close(); // סגור חיבור ישן אם קיים
-        }
-        
-        elements.lobbyStatus.textContent = "מתחבר לשרת...";
-        ws = new WebSocket(SERVER_URL);
-        
-        ws.onopen = () => {
-            elements.lobbyStatus.textContent = "מחובר. ממתין לשחקנים...";
-            console.log("WebSocket connected.");
-            
-            // שליחת הודעת הצטרפות עם שם המשתמש שהתקבל מ-Firebase/הטופס
-            ws.send(JSON.stringify({
-                type: "join",
-                name: name
-            }));
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'joined') {
-                myPlayerId = data.id;
-                console.log(`Joined game with server ID: ${myPlayerId}`);
-            } else if (data.type === 'game_state') {
-                gameData = data;
-                updateGameUI();
-                drawGame();
-            } else if (data.type === 'lobby_state') {
-                updateLobbyUI(data);
-            }
-        };
-
-        ws.onclose = (event) => {
-            console.log("WebSocket closed.", event.reason);
-            elements.lobbyStatus.textContent = "נותק מהשרת. מנסה להתחבר מחדש...";
-            // ניסיון חיבור מחדש או חזרה למסך הראשי
-        };
-
-        ws.onerror = (error) => {
-            console.error("WebSocket error:", error);
-            elements.lobbyStatus.textContent = "שגיאת חיבור לשרת.";
-        };
-    }
-    
-    function sendInput() {
-        if (ws && ws.readyState === WebSocket.OPEN && myPlayerId) {
-            ws.send(JSON.stringify({
-                type: "input",
-                dir: { x: inputState.x, y: inputState.y },
-                angle: inputState.angle,
-                fire: inputState.fire
-            }));
-            inputState.fire = false; // איפוס ירי מיידית לאחר השליחה
-        }
-    }
-
-    // ----------------------------------------------------------------------------------
-    // לוגיקת UI וציור (Drawing)
-    // ----------------------------------------------------------------------------------
-    
-    function updateLobbyUI(state) {
-        const numPlayers = Object.keys(state.players).length;
-        elements.playerCount.textContent = numPlayers;
-        
-        elements.playersList.innerHTML = '';
-        
-        // יצירת רשימת שחקנים
-        for (const id in state.players) {
-            const p = state.players[id];
-            const li = document.createElement('li');
-            li.className = 'flex justify-between items-center p-2 rounded-md transition duration-150';
-            li.style.backgroundColor = id === myPlayerId ? '#374151' : '#4b5563';
-            
-            let statusText = id === myPlayerId ? '(אתה)' : '';
-            if (state.game_state === 'playing' && !p.alive) {
-                 statusText = '(הושמד)';
-            } else if (state.game_state === 'playing' && p.alive) {
-                 statusText = '(בקרב)';
-            }
-
-            // הצגת סטטיסטיקות
-            const stats = p.stats;
-            const statsText = `הרגות: ${stats.kills} | ניצחונות: ${stats.wins}`;
-            
-            li.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <span class="inline-block w-3 h-3 rounded-full" style="background-color: ${p.color};"></span>
-                    <span class="font-semibold text-white">${p.name}</span>
-                    <span class="text-sm text-gray-300">${statusText}</span>
-                </div>
-                <span class="text-xs text-gray-400">${statsText}</span>
-            `;
-            elements.playersList.appendChild(li);
-        }
-        
-        // עדכון כפתור ההתחלה
-        const canStart = numPlayers >= 2 && state.game_state !== 'playing';
-        elements.startGameBtn.disabled = !canStart;
-        elements.startGameBtn.textContent = canStart ? "התחל משחק" : `ממתין לעוד ${2 - numPlayers} שחקנים`;
-
-        // עדכון סטטוס הלובי הכללי
-        if (state.game_state === 'playing') {
-            setAppState('game');
-            elements.gameStateDisplay.textContent = 'משחק פעיל';
-            elements.backToLobbyBtn.classList.remove('hidden'); // אפשרות לחזור ללובי אם מחכים
-        } else if (state.game_state === 'session_end') {
-             elements.lobbyStatus.textContent = "הסשן הסתיים! חזור ללובי או המתן למשחק חדש.";
-             // אם היינו בתוך משחק שנסגר, נחזור ללובי
-             if (appState === 'game') {
-                setAppState('lobby');
-             }
-        } else {
-             elements.lobbyStatus.textContent = "ממתין למשחק. לחץ 'התחל' כשמוכנים.";
-        }
-    }
-    
-    function updateGameUI() {
-        if (!myPlayerId || !gameData.players[myPlayerId]) return;
-        
-        const myPlayer = gameData.players[myPlayerId];
-
-        // עדכון סטטיסטיקות אישיות
-        elements.myKills.textContent = myPlayer.stats.kills;
-        
-        if (!myPlayer.alive) {
-            elements.gameStateDisplay.textContent = 'הושמדת!';
-            // במידה והשחקן מת, נציג כפתור חזרה ללובי ברור
-            elements.backToLobbyBtn.classList.remove('hidden');
-        } else {
-            elements.gameStateDisplay.textContent = 'בקרב';
-            elements.backToLobbyBtn.classList.add('hidden');
-        }
-    }
-
-
-    function drawGame() {
-        ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
-
-        // 1. ציור קליעים
-        gameData.bullets.forEach(b => {
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = '#fef08a'; // צהוב בהיר
-            ctx.fill();
         });
 
-        // 2. ציור טנקים
-        for (const id in gameData.players) {
-            const p = gameData.players[id];
-            
-            // רק אם השחקן חי
-            if (p.alive) {
-                // צבע טנק
-                const color = id === myPlayerId ? p.color : p.color;
+        function showError(msg) {
+            inputs.err.textContent = msg;
+            inputs.err.style.display = 'block';
+        }
+
+        // --- 3. מעבר ללובי לאחר כניסה ---
+        firebase.getAuth().onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                // הסתרת מסך כניסה, הצגת לובי
+                screens.auth.style.display = 'none';
+                screens.lobby.style.display = 'block';
                 
-                // גוף הטנק (מלבן מסתובב)
+                // שליפת נתונים
+                const uid = user.uid;
+                // שם מוצג (לוקח מהחלק הראשון של האימייל הפיקטיבי כברירת מחדל)
+                let displayName = user.email.split('@')[0]; 
+                
+                // ניסיון לשלוף סטטיסטיקות
+                try {
+                    const docSnap = await firebase.getDoc(firebase.doc(db, `artifacts/${APP_ID}/users/${uid}/profile/data`, 'info'));
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        displayName = data.username || displayName;
+                        lobby.kills.textContent = data.kills || 0;
+                        lobby.wins.textContent = data.wins || 0;
+                    }
+                } catch(e) { console.log("No stats yet"); }
+
+                lobby.name.textContent = displayName;
+                
+                // התחברות לשרת כדי לקבל נתוני לובי (כמות שחקנים וכו')
+                connectSocket(displayName);
+            }
+        });
+
+        // --- 4. כפתור "שחק" בלובי ---
+        lobby.playBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // בקשת התחלת משחק
+                ws.send(JSON.stringify({ type: "request_start_game" }));
+                lobby.playBtn.textContent = "ממתין...";
+            }
+        });
+
+        // --- 5. לוגיקת WebSocket ומשחק ---
+        function connectSocket(name) {
+            ws = new WebSocket(SERVER_URL);
+            
+            ws.onopen = () => {
+                // שולח join מיד
+                ws.send(JSON.stringify({ type: "join", name: name }));
+            };
+
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+
+                if (msg.type === 'joined') {
+                    myPlayerId = msg.id;
+                }
+                
+                if (msg.type === 'lobby_state') {
+                    // עדכון כמות מחוברים
+                    lobby.online.textContent = msg.num_players;
+                    
+                    // אם המשחק התחיל - עבור למסך משחק
+                    if (msg.game_state === 'playing') {
+                        screens.lobby.style.display = 'none';
+                        screens.game.style.display = 'block';
+                        lobby.playBtn.textContent = "שחק!";
+                    } else if (msg.game_state === 'session_end') {
+                        // חזרה ללובי
+                        screens.game.style.display = 'none';
+                        screens.lobby.style.display = 'block';
+                    }
+                }
+
+                if (msg.type === 'game_state') {
+                    gameData = msg;
+                    draw(); // ציור הפריים
+                }
+            };
+            
+            ws.onclose = () => {
+                // במקרה של ניתוק, חזור ללובי או נסה להתחבר שוב
+                console.log("Disconnected");
+            };
+        }
+
+        // --- 6. שליטה (ג'ויסטיק ימין, אש שמאל) ---
+        const inputState = { x: 0, y: 0, angle: 0, fire: false };
+        const joystick = document.getElementById('joystick-area');
+        const stick = document.getElementById('stick');
+        const fireBtn = document.getElementById('fire-btn');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ג'ויסטיק (מגע)
+        joystick.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = joystick.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const dx = touch.clientX - centerX;
+            const dy = touch.clientY - centerY;
+            const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 40); // רדיוס מקסימלי
+            const angle = Math.atan2(dy, dx);
+            
+            const moveX = Math.cos(angle) * dist;
+            const moveY = Math.sin(angle) * dist;
+            
+            stick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
+            
+            inputState.x = moveX / 40;
+            inputState.y = moveY / 40;
+            inputState.angle = angle; // שומר זווית גם לירי
+        });
+
+        joystick.addEventListener('touchend', () => {
+            stick.style.transform = `translate(-50%, -50%)`;
+            inputState.x = 0;
+            inputState.y = 0;
+        });
+
+        // כפתור ירי
+        fireBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            inputState.fire = true;
+            sendInput();
+        });
+        
+        fireBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            inputState.fire = false;
+        });
+
+        // לולאת שליחה
+        setInterval(sendInput, 50);
+
+        function sendInput() {
+            if (ws && ws.readyState === WebSocket.OPEN && myPlayerId) {
+                ws.send(JSON.stringify({
+                    type: "input",
+                    dir: { x: inputState.x, y: inputState.y },
+                    angle: inputState.angle,
+                    fire: inputState.fire
+                }));
+                if(inputState.fire) inputState.fire = false; // איפוס ירי
+            }
+        }
+
+        // ציור (Draw)
+        function draw() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // מצלמה עוקבת
+            let camX = 0, camY = 0;
+            if (myPlayerId && gameData.players[myPlayerId]) {
+                const me = gameData.players[myPlayerId];
+                camX = canvas.width / 2 - me.x;
+                camY = canvas.height / 2 - me.y;
+            }
+            
+            ctx.save();
+            ctx.translate(camX, camY);
+            
+            // גבולות
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 5;
+            ctx.strokeRect(0, 0, 600, 600); // גודל המפה מהשרת
+
+            // שחקנים
+            for (let pid in gameData.players) {
+                const p = gameData.players[pid];
+                if (!p.alive) continue;
+                
                 ctx.save();
                 ctx.translate(p.x, p.y);
                 ctx.rotate(p.angle);
                 
-                // גוף
-                ctx.fillStyle = color;
-                ctx.fillRect(-10, -10, 20, 20);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-15, -15, 30, 30); // גוף
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, -5, 25, 10); // קנה
                 
-                // קנה (L=25)
-                ctx.beginPath();
-                ctx.moveTo(10, 0);
-                ctx.lineTo(35, 0);
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 4;
-                ctx.stroke();
-                
-                // מגדל (מעגל)
-                ctx.beginPath();
-                ctx.arc(0, 0, 8, 0, Math.PI * 2);
-                ctx.fillStyle = '#4b5563';
-                ctx.fill();
-
                 ctx.restore();
                 
-                // שם שחקן
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#fff';
-                ctx.font = '12px Heebo';
+                // שם
+                ctx.fillStyle = 'white';
+                ctx.font = "14px Arial";
+                ctx.textAlign = "center";
                 ctx.fillText(p.name, p.x, p.y - 25);
             }
-        }
-    }
 
-    // ----------------------------------------------------------------------------------
-    // לוגיקת קלט (Input)
-    // ----------------------------------------------------------------------------------
-    
-    /** עדכון זווית על בסיס מיקום העכבר/טאץ' */
-    function updateAngle(clientX, clientY) {
-        if (!myPlayerId || !gameData.players[myPlayerId]) return;
-        
-        const canvasRect = elements.canvas.getBoundingClientRect();
-        const centerX = canvasRect.left + elements.canvas.width / 2;
-        const centerY = canvasRect.top + elements.canvas.height / 2;
-        
-        // יש למצוא את מיקום הטנק הנוכחי (משוער) בתוך הקנבס
-        // לצורך הפשטות, נשתמש במיקום הטנק המדווח מהשרת
-        const p = gameData.players[myPlayerId];
-        if (!p) return;
-        
-        // מיקום הטנק ב-Viewport
-        const tankX_viewport = canvasRect.left + p.x;
-        const tankY_viewport = canvasRect.top + p.y;
-
-        // חישוב הזווית בין הטנק לנקודת הקליק
-        const dx = clientX - tankX_viewport;
-        const dy = clientY - tankY_viewport;
-        
-        // הזווית ברדיאנים
-        inputState.angle = Math.atan2(dy, dx);
-        sendInput();
-    }
-    
-    /** לולאת שליחת קלט */
-    setInterval(sendInput, 50); // שליחת קלט 20 פעמים בשנייה
-
-    // ----------------------------------------------------------------------------------
-    // Event Listeners ו-Initialisation
-    // ----------------------------------------------------------------------------------
-
-    window.onload = () => {
-        // 1. אתחול Firebase
-        try {
-            firebaseApp = firebase.initializeApp(window.__firebase_config);
-            auth = firebase.getAuth(firebaseApp);
-            db = firebase.getFirestore(firebaseApp);
-            console.log("Firebase initialized.");
-            
-            // 2. בדיקת מצב אימות ראשוני
-            firebase.onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                    playerName = await getPlayerName(userId);
-                    
-                    if (!playerName) {
-                        // אם המשתמש מחובר (אולי דרך Custom Token), אך אין שם, נבקש שם
-                        playerName = user.email ? user.email.split('@')[0] : 'Guest';
-                    }
-                    
-                    elements.playerWelcomeName.textContent = playerName;
-                    setAppState('lobby');
-                    connectToServer(playerName);
-
-                } else {
-                    // אין משתמש מחובר - הצג מסך אימות
-                    setAppState('auth');
-                }
+            // קליעים
+            ctx.fillStyle = 'yellow';
+            gameData.bullets.forEach(b => {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                ctx.fill();
             });
-            
-        } catch (e) {
-            console.error("Failed to initialize Firebase:", e);
-            // אם Firebase נכשל, ננסה להיכנס כאנונימי ללא אימות
-            setAppState('auth');
+
+            ctx.restore();
         }
 
-
-        // 3. אירועי טופס אימות (כניסה/הרשמה)
-        elements.authForm.addEventListener('submit', handleAuth);
-        
-        // מעבר בין כניסה להרשמה
-        elements.toggleAuthBtn.addEventListener('click', () => {
-            isRegisterMode = !isRegisterMode;
-            elements.authTitle.textContent = isRegisterMode ? 'הרשמת משתמש חדש' : 'כניסת משתמש קיים';
-            elements.authSubmitBtn.textContent = isRegisterMode ? 'הרשמה ומשחק' : 'התחבר';
-            elements.toggleAuthBtn.textContent = isRegisterMode ? 'יש לך חשבון? לחץ כאן לכניסה' : 'אין לך חשבון? לחץ כאן להרשמה';
-            elements.authError.classList.add('hidden');
-        });
-
-        // 4. אירועי לובי
-        elements.startGameBtn.addEventListener('click', () => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "request_start_game" }));
-            }
-        });
-        
-        elements.logoutBtn.addEventListener('click', handleLogout);
-        elements.backTo_lobbyBtn.addEventListener('click', () => setAppState('lobby'));
-
-
-        // 5. אירועי קלט (Game)
-        
-        // לחצני ג'ויסטיק
-        elements.upBtn.addEventListener('mousedown', () => { inputState.y = -1; });
-        elements.downBtn.addEventListener('mousedown', () => { inputState.y = 1; });
-        elements.leftBtn.addEventListener('mousedown', () => { inputState.x = -1; inputState.angle -= 0.1; }); // סיבוב קל עם תזוזה
-        elements.rightBtn.addEventListener('mousedown', () => { inputState.x = 1; inputState.angle += 0.1; });
-
-        // Touchstart/Touchend עבור מובייל
-        elements.upBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.y = -1; });
-        elements.downBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.y = 1; });
-        elements.leftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.x = -1; inputState.angle -= 0.1; });
-        elements.rightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.x = 1; inputState.angle += 0.1; });
-
-        // איפוס תנועה
-        document.querySelectorAll('#joystick-container button').forEach(btn => {
-            btn.addEventListener('mouseup', () => { inputState.x = 0; inputState.y = 0; });
-            btn.addEventListener('touchend', () => { inputState.x = 0; inputState.y = 0; });
-            btn.addEventListener('mouseout', () => { inputState.x = 0; inputState.y = 0; });
-        });
-        
-        // ירי
-        elements.fireBtn.addEventListener('click', () => { inputState.fire = true; sendInput(); });
-        elements.fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.fire = true; sendInput(); });
-        
-        // סיבוב על ידי עכבר/טאץ' על הקנבס
-        elements.canvas.addEventListener('mousemove', (e) => {
-            if (appState === 'game') updateAngle(e.clientX, e.clientY);
-        });
-        elements.canvas.addEventListener('click', (e) => {
-            if (appState === 'game') {
-                updateAngle(e.clientX, e.clientY); // עדכון זווית לפני ירי
-                inputState.fire = true; 
-                sendInput();
-            }
-        });
-
-        // קלט מקלדת
-        document.addEventListener('keydown', (e) => {
-            if (appState === 'game') {
-                switch (e.key) {
-                    case 'w':
-                    case 'W':
-                    case 'ArrowUp':
-                        inputState.y = -1; break;
-                    case 's':
-                    case 'S':
-                    case 'ArrowDown':
-                        inputState.y = 1; break;
-                    case 'a':
-                    case 'A':
-                    case 'ArrowLeft':
-                        inputState.x = -1; break;
-                    case 'd':
-                    case 'D':
-                    case 'ArrowRight':
-                        inputState.x = 1; break;
-                    case ' ': // Spacebar for fire
-                        inputState.fire = true; sendInput(); break;
-                }
-            }
-        });
-        document.addEventListener('keyup', (e) => {
-             if (appState === 'game') {
-                switch (e.key) {
-                    case 'w':
-                    case 'W':
-                    case 'ArrowUp':
-                    case 's':
-                    case 'S':
-                    case 'ArrowDown':
-                        inputState.y = 0; break;
-                    case 'a':
-                    case 'A':
-                    case 'ArrowLeft':
-                    case 'd':
-                    case 'D':
-                    case 'ArrowRight':
-                        inputState.x = 0; break;
-                }
-            }
-        });
-    };
-</script>
+    </script>
 </body>
 </html>
