@@ -2,528 +2,780 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>Tank Family Lobby</title>
-    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מלחמת טנקים רבת משתתפים</title>
+    <!-- טעינת Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- טעינת Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithCustomToken, 
+            signInAnonymously, 
+            onAuthStateChanged,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            getDoc 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // הגדרות גלובליות לגישה בתוך הסקריפט
+        window.firebase = {
+            initializeApp, 
+            getAuth, 
+            signInWithCustomToken, 
+            signInAnonymously,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            onAuthStateChanged,
+            getFirestore, 
+            doc, 
+            setDoc, 
+            getDoc 
+        };
+        
+        // קריאת משתני הסביבה הגלובליים
+        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.__firebase_config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    </script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap');
+        
         body {
+            font-family: 'Heebo', sans-serif;
             margin: 0;
             padding: 0;
-            overflow: hidden;
-            background-color: #333; /* צבע גיבוי למקרה שהתמונה לא נטענת */
-            background-image: url('background.jpg'); /* נתיב לקובץ התמונה שלך */
-            background-size: cover; /* מכסה את כל המסך */
-            background-position: center; /* ממקם במרכז */
-            font-family: sans-serif;
-            touch-action: none;
-            user-select: none;
-        }
-        #gameCanvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-        /* פאנלים ראשיים */
-        #loginScreen, #lobbyScreen, #gameScreen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7); /* רקע שחור שקוף מעל התמונה */
-            color: white;
-            text-align: center;
-            display: none;
-            z-index: 10;
-        }
-        /* מסך כניסה */
-        #loginScreen {
+            /* שימוש בתמונת הרקע intro.png כפי שביקשת */
+            background-image: url('intro.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            min-height: 100vh;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
         }
-        #loginScreen input {
-            padding: 10px;
-            margin: 10px 0;
-            font-size: 18px;
-            border: none;
-            border-radius: 5px;
-            width: 80%;
-            max-width: 300px;
-            color: #333;
-        }
-        #loginScreen button {
-            padding: 10px 20px;
-            font-size: 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
 
-        /* מסך לובי */
-        #lobbyScreen {
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            padding-top: 50px;
-        }
-        #podium {
-            flex-grow: 1;
+        #app-container {
+            backdrop-filter: blur(5px);
+            background-color: rgba(17, 24, 39, 0.8); /* רקע כהה שקוף מעט */
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 800px;
+            min-height: 80vh;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
-            padding: 20px;
         }
-        #statsPanel {
-            width: 250px;
-            height: 400px;
-            background: rgba(0, 0, 0, 0.4);
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            text-align: right;
-            position: relative;
-        }
-        #statsPanel h3 { margin-top: 0; border-bottom: 1px solid #555; padding-bottom: 10px; }
-        .stat-line { display: flex; justify-content: space-between; margin-bottom: 8px; }
-        
-        #playerStatus {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 14px;
-            background: #555;
-            padding: 5px;
-            border-radius: 3px;
-        }
-        
-        #startGameBtn {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            padding: 15px 30px;
-            font-size: 22px;
-            background-color: #FF5722;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        #startGameBtn:hover:not(:disabled) { background-color: #E64A19; }
-        #startGameBtn:disabled { background-color: #555; cursor: not-allowed; }
 
-        /* כפתורי שליטה במשחק (מוסתרים בלובי) */
-        .controls {
-            display: none; /* מוסתר כברירת מחדל */
-            position: absolute;
-            bottom: 20px;
+        #game-area, #lobby-area {
             width: 100%;
-            height: 150px;
-            pointer-events: none;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-sizing: border-box;
-            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #game-canvas {
+            border: 4px solid #4ade80;
+            border-radius: 0.5rem;
+            background-color: #1f2937;
+            touch-action: none; /* חיוני למשחקיות בטאץ' */
+        }
+        
+        .tank-button {
+            transition: all 0.1s ease-in-out;
+            cursor: pointer;
         }
 
+        .tank-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        .tank-button:active {
+            transform: translateY(1px);
+        }
     </style>
 </head>
 <body>
-    <div id="loginScreen">
-        <h2>ברוכים הבאים למשפחת הטנקים</h2>
-        <input type="text" id="playerNameInput" placeholder="הכנס שם שחקן">
-        <button id="joinLobbyBtn">כניסה ללובי</button>
+
+<div id="app-container" class="text-white p-6 md:p-10">
+    <h1 class="text-4xl font-bold mb-6 text-green-400">מלחמת טנקים</h1>
+    <div id="loader" class="hidden text-center">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500"></div>
+        <p class="mt-2">טוען...</p>
     </div>
 
-    <div id="lobbyScreen">
-        <div id="podium">
-            <h2>הטנק שלך</h2>
-            <div id="myTankVisual" style="width: 100px; height: 100px; border-radius: 50%; background-color: gray; margin: 20px auto; border: 5px solid white;"></div>
-            
-            <p id="playerStatus"></p>
-        </div>
+    <!-- ---------------------------------------------------- -->
+    <!-- 1. מסך אימות (Auth) - כניסה והרשמה -->
+    <!-- ---------------------------------------------------- -->
+    <div id="auth-area" class="w-full max-w-sm">
+        <h2 id="auth-title" class="text-2xl font-semibold mb-4 text-center">כניסה</h2>
+        <div id="auth-error-message" class="hidden p-2 mb-4 text-sm font-medium text-red-100 bg-red-600 rounded-lg text-center"></div>
 
-        <div id="statsPanel">
-            <h3>סטטיסטיקות אישיות</h3>
-            <div class="stat-line"><span>שם:</span> <span id="statName"></span></div>
-            <div class="stat-line"><span>צבע הטנק:</span> <span id="statColor"></span></div>
-            <hr>
-            <div class="stat-line"><span>זמן משחק כולל:</span> <span id="statPlayTime">0</span></div>
-            <div class="stat-line"><span>קילים כוללים:</span> <span id="statKills">0</span></div>
-            <div class="stat-line"><span>נצחונות (מקום 1):</span> <span id="statWins">0</span></div>
-
-            <button id="startGameBtn" disabled>התחל משחק (חכה לשחקנים)</button>
-        </div>
-    </div>
-
-    <div id="gameScreen">
-        <canvas id="gameCanvas"></canvas>
-        <div class="controls" id="gameControls">
-            <div class="dpad" id="dpad">
-                <div id="stick"></div>
+        <form id="auth-form" class="space-y-4">
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-300">אימייל (שם משתמש)</label>
+                <input type="email" id="email" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-green-500 focus:ring-green-500">
             </div>
-            <div class="fire-btn" id="fireBtn">אש</div>
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-300">סיסמה</label>
+                <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-green-500 focus:ring-green-500">
+            </div>
+            <button id="auth-submit-btn" type="submit" class="w-full py-2 px-4 bg-green-600 hover:bg-green-700 rounded-md text-white font-semibold tank-button">התחבר</button>
+        </form>
+        
+        <div class="mt-4 text-center">
+            <button id="toggle-auth-btn" class="text-sm text-green-400 hover:text-green-300 transition duration-150 ease-in-out">
+                אין לך חשבון? לחץ כאן להרשמה
+            </button>
         </div>
     </div>
 
-    <script>
-        // --- הגדרות ---
-        const SERVER_URL = "wss://tank-family-server.onrender.com/ws";
- 
+
+    <!-- ---------------------------------------------------- -->
+    <!-- 2. מסך לובי (Lobby) -->
+    <!-- ---------------------------------------------------- -->
+    <div id="lobby-area" class="hidden w-full">
+        <h2 class="text-2xl font-semibold mb-4">לובי: <span id="player-welcome-name"></span></h2>
+        <p id="lobby-status" class="text-lg mb-4 text-yellow-400"></p>
         
-        // --- מצב הלקוח ---
-        let socket;
-        let myId = null;
-        let myName = null; // ישונה ל-null ב-onclose
-        let myColor = "gray";
-        let clientState = {
-            game_state: 'waiting', // 'waiting', 'playing', 'session_end'
-            players: {},
-            bullets: []
+        <button id="start-game-btn" class="tank-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg mb-6 disabled:opacity-50" disabled>
+            התחל משחק (מינימום 2 שחקנים)
+        </button>
+
+        <div class="w-full max-w-md bg-gray-700 p-4 rounded-lg shadow-lg">
+            <h3 class="text-xl font-medium mb-3 border-b border-gray-600 pb-2">שחקנים מחוברים (<span id="player-count">0</span>)</h3>
+            <ul id="players-list" class="space-y-2">
+                <!-- רשימת השחקנים תופיע כאן -->
+            </ul>
+        </div>
+        <button id="logout-btn" class="mt-6 text-sm text-red-400 hover:text-red-300 transition duration-150 ease-in-out">
+            התנתק
+        </button>
+    </div>
+
+    <!-- ---------------------------------------------------- -->
+    <!-- 3. מסך משחק (Game) -->
+    <!-- ---------------------------------------------------- -->
+    <div id="game-area" class="hidden">
+        <div id="game-info" class="mb-4 text-center">
+            <p class="text-xl text-green-400 font-bold">מצב משחק: <span id="game-state-display">משחק</span></p>
+            <p class="text-sm text-gray-400">הריגות שלך: <span id="my-kills">0</span></p>
+        </div>
+        <canvas id="game-canvas" width="600" height="600"></canvas>
+        <div id="joystick-container" class="mt-4 p-4 bg-gray-800 rounded-full shadow-inner">
+            <p class="text-sm text-gray-400 mb-2">שליטה בטנק:</p>
+            <div class="grid grid-cols-3 gap-2 w-40 h-40">
+                <div class="col-start-2">
+                    <button id="up-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▲</button>
+                </div>
+                <div class="flex items-center justify-end">
+                    <button id="left-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">◀</button>
+                </div>
+                <div class="flex items-center justify-center">
+                    <!-- מרכז ריק -->
+                </div>
+                <div class="flex items-center justify-start">
+                    <button id="right-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▶</button>
+                </div>
+                <div class="col-start-2">
+                    <button id="down-btn" class="w-full h-full bg-gray-600 hover:bg-gray-500 rounded-md p-2 tank-button">▼</button>
+                </div>
+            </div>
+            <button id="fire-btn" class="mt-4 w-full py-3 bg-red-600 hover:bg-red-700 rounded-full text-white font-bold tank-button">
+                אש!
+            </button>
+        </div>
+        
+        <button id="back-to-lobby-btn" class="mt-6 text-sm text-yellow-400 hover:text-yellow-300 transition duration-150 ease-in-out hidden">
+            חזור ללובי
+        </button>
+    </div>
+</div>
+
+<script type="module">
+    // ----------------------------------------------------------------------------------
+    // הגדרת משתנים גלובליים ו-Firebase
+    // ----------------------------------------------------------------------------------
+
+    let firebaseApp, auth, db;
+    let userId = null; // ה-UID של המשתמש המחובר
+    let playerName = null; // שם המשתמש מ-Firestore
+    
+    // קבועים
+    const RENDER_SERVER_DOMAIN = "tank-family-server.onrender.com"; // יש לשנות לדומיין שלך!
+    const SERVER_URL = `wss://${RENDER_SERVER_DOMAIN}/ws`; 
+    const USERS_COLLECTION_PATH = 'artifacts/' + window.__app_id + '/users/';
+    const APP_ID = window.__app_id;
+
+    // מצב האפליקציה: 'auth', 'lobby', 'game'
+    let appState = 'auth';
+
+    // משתני WebSocket ומשחק
+    let ws = null;
+    let myPlayerId = null; // ה-ID שקיבלתי מהשרת (שונה מ-userId של Firebase)
+    let gameData = { players: {}, bullets: [] };
+    
+    // אלמנטי DOM
+    const elements = {
+        loader: document.getElementById('loader'),
+        authArea: document.getElementById('auth-area'),
+        lobbyArea: document.getElementById('lobby-area'),
+        gameArea: document.getElementById('game-area'),
+        authTitle: document.getElementById('auth-title'),
+        authForm: document.getElementById('auth-form'),
+        authSubmitBtn: document.getElementById('auth-submit-btn'),
+        toggleAuthBtn: document.getElementById('toggle-auth-btn'),
+        authError: document.getElementById('auth-error-message'),
+        playerWelcomeName: document.getElementById('player-welcome-name'),
+        lobbyStatus: document.getElementById('lobby-status'),
+        startGameBtn: document.getElementById('start-game-btn'),
+        playersList: document.getElementById('players-list'),
+        playerCount: document.getElementById('player-count'),
+        logoutBtn: document.getElementById('logout-btn'),
+        canvas: document.getElementById('game-canvas'),
+        gameStateDisplay: document.getElementById('game-state-display'),
+        myKills: document.getElementById('my-kills'),
+        backToLobbyBtn: document.getElementById('back-to-lobby-btn'),
+        // לחצני שליטה (קיצורי דרך)
+        upBtn: document.getElementById('up-btn'),
+        downBtn: document.getElementById('down-btn'),
+        leftBtn: document.getElementById('left-btn'),
+        rightBtn: document.getElementById('right-btn'),
+        fireBtn: document.getElementById('fire-btn'),
+    };
+    
+    const ctx = elements.canvas.getContext('2d');
+    
+    let isRegisterMode = false;
+
+    // קלט משחק
+    const inputState = { 
+        x: 0, 
+        y: 0, 
+        angle: 0,
+        fire: false
+    };
+
+    // ----------------------------------------------------------------------------------
+    // פונקציות עזר ו-UI
+    // ----------------------------------------------------------------------------------
+
+    /** מעביר את מצב התצוגה של האפליקציה */
+    function setAppState(newState) {
+        appState = newState;
+        elements.authArea.classList.add('hidden');
+        elements.lobbyArea.classList.add('hidden');
+        elements.gameArea.classList.add('hidden');
+        elements.backToLobbyBtn.classList.add('hidden');
+        elements.loader.classList.add('hidden');
+
+        switch (newState) {
+            case 'auth':
+                elements.authArea.classList.remove('hidden');
+                document.body.style.backgroundImage = "url('intro.png')";
+                break;
+            case 'lobby':
+                elements.lobbyArea.classList.remove('hidden');
+                document.body.style.backgroundImage = "none";
+                document.body.style.backgroundColor = "#1f2937"; // רקע אפור כהה למשחק
+                break;
+            case 'game':
+                elements.gameArea.classList.remove('hidden');
+                elements.backToLobbyBtn.classList.remove('hidden');
+                document.body.style.backgroundImage = "none";
+                document.body.style.backgroundColor = "#1f2937";
+                break;
+            case 'loading':
+                elements.loader.classList.remove('hidden');
+                break;
+        }
+    }
+    
+    /** מציג הודעת שגיאה בטופס האימות */
+    function displayAuthError(message) {
+        elements.authError.textContent = message;
+        elements.authError.classList.remove('hidden');
+        setTimeout(() => {
+            elements.authError.classList.add('hidden');
+        }, 5000);
+    }
+    
+    // ----------------------------------------------------------------------------------
+    // לוגיקת אימות (Authentication)
+    // ----------------------------------------------------------------------------------
+    
+    /** שמירת שם המשתמש ב-Firestore */
+    async function savePlayerName(uid, name) {
+        try {
+            const userDocRef = firebase.doc(db, USERS_COLLECTION_PATH + uid + '/profile/data', 'user_data');
+            await firebase.setDoc(userDocRef, { name: name, uid: uid }, { merge: true });
+            console.log("Player name saved to Firestore.");
+        } catch (error) {
+            console.error("Error saving player name:", error);
+            // אם כישלון, אנו עדיין ממשיכים, אך ייתכן שהסטטיסטיקות לא ישמרו.
+        }
+    }
+    
+    /** שליפת שם המשתמש מ-Firestore */
+    async function getPlayerName(uid) {
+        try {
+            const userDocRef = firebase.doc(db, USERS_COLLECTION_PATH + uid + '/profile/data', 'user_data');
+            const docSnap = await firebase.getDoc(userDocRef);
+            if (docSnap.exists() && docSnap.data().name) {
+                return docSnap.data().name;
+            }
+        } catch (error) {
+            console.error("Error fetching player name:", error);
+        }
+        return null;
+    }
+    
+    /** מטפל בכניסה או יצירת חשבון */
+    async function handleAuth(e) {
+        e.preventDefault();
+        setAppState('loading');
+        
+        const email = elements.authForm.email.value;
+        const password = elements.authForm.password.value;
+        
+        try {
+            if (isRegisterMode) {
+                // יצירת משתמש חדש
+                const userCredential = await firebase.createUserWithEmailAndPassword(auth, email, password);
+                userId = userCredential.user.uid;
+                // שמירת שם משתמש ראשוני (שם חלק האימייל)
+                const defaultName = email.split('@')[0];
+                await savePlayerName(userId, defaultName);
+                playerName = defaultName;
+                console.log("User registered successfully:", userId);
+
+            } else {
+                // כניסת משתמש קיים
+                const userCredential = await firebase.signInWithEmailAndPassword(auth, email, password);
+                userId = userCredential.user.uid;
+                playerName = await getPlayerName(userId);
+                if (!playerName) {
+                    playerName = email.split('@')[0];
+                }
+                console.log("User signed in successfully:", userId);
+            }
+            
+            // הצלחה: המשך למערכת ה-WebSocket
+            setAppState('lobby');
+            elements.playerWelcomeName.textContent = playerName;
+            connectToServer(playerName);
+
+        } catch (error) {
+            console.error("Auth Error:", error);
+            let errorMessage = "שגיאת אימות. אנא ודא שהאימייל והסיסמה נכונים.";
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = "האימייל כבר קיים במערכת. נסה להיכנס.";
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = "פורמט אימייל לא חוקי.";
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = "הסיסמה חלשה מדי (מינימום 6 תווים).";
+            }
+            displayAuthError(errorMessage);
+            setAppState('auth');
+        }
+    }
+    
+    /** מטפל בהתנתקות */
+    function handleLogout() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close();
+        }
+        auth.signOut();
+        userId = null;
+        playerName = null;
+        setAppState('auth');
+    }
+
+    // ----------------------------------------------------------------------------------
+    // לוגיקת WebSocket
+    // ----------------------------------------------------------------------------------
+
+    function connectToServer(name) {
+        if (ws) {
+            ws.close(); // סגור חיבור ישן אם קיים
+        }
+        
+        elements.lobbyStatus.textContent = "מתחבר לשרת...";
+        ws = new WebSocket(SERVER_URL);
+        
+        ws.onopen = () => {
+            elements.lobbyStatus.textContent = "מחובר. ממתין לשחקנים...";
+            console.log("WebSocket connected.");
+            
+            // שליחת הודעת הצטרפות עם שם המשתמש שהתקבל מ-Firebase/הטופס
+            ws.send(JSON.stringify({
+                type: "join",
+                name: name
+            }));
         };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'joined') {
+                myPlayerId = data.id;
+                console.log(`Joined game with server ID: ${myPlayerId}`);
+            } else if (data.type === 'game_state') {
+                gameData = data;
+                updateGameUI();
+                drawGame();
+            } else if (data.type === 'lobby_state') {
+                updateLobbyUI(data);
+            }
+        };
+
+        ws.onclose = (event) => {
+            console.log("WebSocket closed.", event.reason);
+            elements.lobbyStatus.textContent = "נותק מהשרת. מנסה להתחבר מחדש...";
+            // ניסיון חיבור מחדש או חזרה למסך הראשי
+        };
+
+        ws.onerror = (error) => {
+            console.error("WebSocket error:", error);
+            elements.lobbyStatus.textContent = "שגיאת חיבור לשרת.";
+        };
+    }
+    
+    function sendInput() {
+        if (ws && ws.readyState === WebSocket.OPEN && myPlayerId) {
+            ws.send(JSON.stringify({
+                type: "input",
+                dir: { x: inputState.x, y: inputState.y },
+                angle: inputState.angle,
+                fire: inputState.fire
+            }));
+            inputState.fire = false; // איפוס ירי מיידית לאחר השליחה
+        }
+    }
+
+    // ----------------------------------------------------------------------------------
+    // לוגיקת UI וציור (Drawing)
+    // ----------------------------------------------------------------------------------
+    
+    function updateLobbyUI(state) {
+        const numPlayers = Object.keys(state.players).length;
+        elements.playerCount.textContent = numPlayers;
         
-        // --- DOM Elements ---
-        const loginScreen = document.getElementById('loginScreen');
-        const lobbyScreen = document.getElementById('lobbyScreen');
-        const gameScreen = document.getElementById('gameScreen');
-        const playerNameInput = document.getElementById('playerNameInput');
-        const joinLobbyBtn = document.getElementById('joinLobbyBtn');
-        const startGameBtn = document.getElementById('startGameBtn');
-        const myTankVisual = document.getElementById('myTankVisual');
-        const playerStatus = document.getElementById('playerStatus');
-        const gameCanvas = document.getElementById('gameCanvas');
-        const gameControls = document.getElementById('gameControls');
-        const dpad = document.getElementById('dpad');
-        const stick = document.getElementById('stick');
-        const fireBtn = document.getElementById('fireBtn');
-        const ctx = gameCanvas.getContext('2d');
-        const SCREEN_WIDTH = window.innerWidth;
-        const SCREEN_HEIGHT = window.innerHeight;
-
-        // --- פונקציות תצוגה ---
-        function switchScreen(screenName) {
-            loginScreen.style.display = 'none';
-            lobbyScreen.style.display = 'none';
-            gameScreen.style.display = 'none';
-
-            if (screenName === 'login') loginScreen.style.display = 'flex';
-            if (screenName === 'lobby') lobbyScreen.style.display = 'flex';
-            if (screenName === 'game') gameScreen.style.display = 'block';
+        elements.playersList.innerHTML = '';
+        
+        // יצירת רשימת שחקנים
+        for (const id in state.players) {
+            const p = state.players[id];
+            const li = document.createElement('li');
+            li.className = 'flex justify-between items-center p-2 rounded-md transition duration-150';
+            li.style.backgroundColor = id === myPlayerId ? '#374151' : '#4b5563';
             
-            // הצגת/הסתרת פקדי המשחק
-            gameControls.style.display = screenName === 'game' ? 'flex' : 'none';
-        }
-
-        function updateLobbyUI(state) {
-            const numPlayers = Object.keys(state.players).length;
-            
-            if (myId && state.players[myId]) {
-                const me = state.players[myId];
-                // עדכון ויזואלי של הטנק
-                myTankVisual.style.backgroundColor = me.color;
-                myTankVisual.style.borderColor = "white"; // כדי להדגיש
-
-                // עדכון הסטטיסטיקות
-                document.getElementById('statName').innerText = me.name;
-                document.getElementById('statColor').innerText = me.color;
-                document.getElementById('statKills').innerText = me.stats.kills;
-                document.getElementById('statWins').innerText = me.stats.wins;
-                document.getElementById('statPlayTime').innerText = formatPlayTime(me.stats.play_time);
-            }
-            
-            // עדכון סטטוס וניהול כפתור התחל משחק
-            if (numPlayers < 2) {
-                playerStatus.innerText = "שחקן יחיד מחובר. מחכה לשחקנים נוספים...";
-                startGameBtn.innerText = "התחל משחק (חכה לשחקנים)";
-                startGameBtn.disabled = true;
-            } else {
-                playerStatus.innerText = `מחוברים: ${numPlayers} שחקנים`;
-                startGameBtn.innerText = "התחל משחק";
-                startGameBtn.disabled = false;
+            let statusText = id === myPlayerId ? '(אתה)' : '';
+            if (state.game_state === 'playing' && !p.alive) {
+                 statusText = '(הושמד)';
+            } else if (state.game_state === 'playing' && p.alive) {
+                 statusText = '(בקרב)';
             }
 
-            // עדכון אם משחק רץ ברקע (הצטרפות מאוחרת)
-            if (state.game_state === 'playing') {
-                playerStatus.innerText += " (משחק רץ ברקע, ממתין לסיום סשן...)";
-                startGameBtn.disabled = true;
-            }
+            // הצגת סטטיסטיקות
+            const stats = p.stats;
+            const statsText = `הרגות: ${stats.kills} | ניצחונות: ${stats.wins}`;
             
-            // אם סשן הסתיים, להציג הודעה
-            if (state.game_state === 'session_end') {
-                playerStatus.innerText = "סשן הסתיים! לחץ התחל משחק כדי להתחיל מחדש.";
-                // אם אתה השחקן היחיד, הכפתור ישאר כבוי אם אין 2
-            }
+            li.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <span class="inline-block w-3 h-3 rounded-full" style="background-color: ${p.color};"></span>
+                    <span class="font-semibold text-white">${p.name}</span>
+                    <span class="text-sm text-gray-300">${statusText}</span>
+                </div>
+                <span class="text-xs text-gray-400">${statsText}</span>
+            `;
+            elements.playersList.appendChild(li);
         }
         
-        function formatPlayTime(seconds) {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            return `${h} שעות, ${m} דקות, ${s} שניות`;
+        // עדכון כפתור ההתחלה
+        const canStart = numPlayers >= 2 && state.game_state !== 'playing';
+        elements.startGameBtn.disabled = !canStart;
+        elements.startGameBtn.textContent = canStart ? "התחל משחק" : `ממתין לעוד ${2 - numPlayers} שחקנים`;
+
+        // עדכון סטטוס הלובי הכללי
+        if (state.game_state === 'playing') {
+            setAppState('game');
+            elements.gameStateDisplay.textContent = 'משחק פעיל';
+            elements.backToLobbyBtn.classList.remove('hidden'); // אפשרות לחזור ללובי אם מחכים
+        } else if (state.game_state === 'session_end') {
+             elements.lobbyStatus.textContent = "הסשן הסתיים! חזור ללובי או המתן למשחק חדש.";
+             // אם היינו בתוך משחק שנסגר, נחזור ללובי
+             if (appState === 'game') {
+                setAppState('lobby');
+             }
+        } else {
+             elements.lobbyStatus.textContent = "ממתין למשחק. לחץ 'התחל' כשמוכנים.";
         }
+    }
+    
+    function updateGameUI() {
+        if (!myPlayerId || !gameData.players[myPlayerId]) return;
+        
+        const myPlayer = gameData.players[myPlayerId];
+
+        // עדכון סטטיסטיקות אישיות
+        elements.myKills.textContent = myPlayer.stats.kills;
+        
+        if (!myPlayer.alive) {
+            elements.gameStateDisplay.textContent = 'הושמדת!';
+            // במידה והשחקן מת, נציג כפתור חזרה ללובי ברור
+            elements.backToLobbyBtn.classList.remove('hidden');
+        } else {
+            elements.gameStateDisplay.textContent = 'בקרב';
+            elements.backToLobbyBtn.classList.add('hidden');
+        }
+    }
 
 
-        // --- לוגיקת WebSocket ---
-        function connect() {
-            socket = new WebSocket(SERVER_URL);
+    function drawGame() {
+        ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
 
-            socket.onopen = () => {
-                // בדיקה אם השם כבר הוכנס (זה יקרה רק אם נמלא אותו ונלחץ כניסה)
-                if (myName) {
-                    const joinMsg = { type: "join", name: myName };
-                    socket.send(JSON.stringify(joinMsg));
-                } else {
-                    // אם אין שם (למשל אחרי onclose), חוזר למסך כניסה
-                    switchScreen('login'); 
-                }
-            };
+        // 1. ציור קליעים
+        gameData.bullets.forEach(b => {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#fef08a'; // צהוב בהיר
+            ctx.fill();
+        });
 
-            socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-
-                if (msg.type === 'joined') {
-                    myId = msg.id;
-                    myColor = msg.color;
-                    switchScreen('lobby'); // תמיד עובר ללובי אחרי הצטרפות
-                }
+        // 2. ציור טנקים
+        for (const id in gameData.players) {
+            const p = gameData.players[id];
+            
+            // רק אם השחקן חי
+            if (p.alive) {
+                // צבע טנק
+                const color = id === myPlayerId ? p.color : p.color;
                 
-                if (msg.type === 'lobby_state') {
-                    clientState.game_state = msg.game_state;
-                    clientState.players = msg.players;
-                    updateLobbyUI(clientState);
-                    
-                    if (clientState.game_state === 'playing') {
-                        // אם השרת מדווח שהמשחק רץ, מעבר למסך משחק
-                        switchScreen('game');
-                    }
-                    if (clientState.game_state === 'session_end') {
-                        // אם סשן הסתיים, לחזור ללובי
-                        switchScreen('lobby'); 
-                        // שולח הודעה לשרת שחזרנו ללובי (אם צריך, ייתכן ואין צורך אם השרת כבר יודע)
-                        socket.send(JSON.stringify({type: "lobby_reconnect"})); 
-                    }
-                }
-                
-                if (msg.type === 'game_state') {
-                    clientState.players = msg.players;
-                    clientState.bullets = msg.bullets;
-                    // ציור יטופל ב-gameLoop
-                }
-
-                if (msg.type === 'error') {
-                    alert("שגיאה: " + msg.reason);
-                }
-            };
-
-            socket.onclose = () => {
-                myId = null;
-                myName = null; // *** זהו התיקון העיקרי: איפוס השם בניתוק ***
-                switchScreen('login'); // תמיד חוזר למסך כניסה
-                setTimeout(connect, 3000);
-            };
-        }
-
-        // --- Input Handling ---
-        
-        // כפתור כניסה
-        joinLobbyBtn.addEventListener('click', () => {
-            const name = playerNameInput.value.trim();
-            if (name.length >= 2) {
-                myName = name; // שומר את השם שהוכנס
-                connect(); // מתחבר עם השם
-            } else {
-                alert("הכנס שם שחקן תקין (מינימום 2 תווים).");
-            }
-        });
-
-        // כפתור התחל משחק בלובי
-        startGameBtn.addEventListener('click', () => {
-            if (socket && socket.readyState === WebSocket.OPEN && !startGameBtn.disabled) {
-                socket.send(JSON.stringify({ type: "request_start_game" }));
-                startGameBtn.innerText = "ממתין להתחלת משחק...";
-            }
-        });
-        
-        
-        // הגדרות ג'ויסטיק וקלט
-        let input = { x: 0, y: 0 };
-        let isFiring = false;
-        let dpadCenter = { x: 0, y: 0 };
-        let tankAngle = 0; // זווית הטנק
-
-        function updateJoystick(touchX, touchY) {
-            const rect = dpad.getBoundingClientRect();
-            dpadCenter = { 
-                x: rect.left + rect.width / 2, 
-                y: rect.top + rect.height / 2 
-            };
-            const maxDist = 40;
-            let dx = touchX - dpadCenter.x;
-            let dy = touchY - dpadCenter.y;
-            
-            const distance = Math.sqrt(dx*dx + dy*dy);
-            
-            if (distance > maxDist) {
-                const ratio = maxDist / distance;
-                dx *= ratio;
-                dy *= ratio;
-            }
-            
-            stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-
-            input.x = dx / maxDist;
-            input.y = dy / maxDist;
-            
-            // אם יש תנועה, מעדכנים את זווית הטנק לכיוון התנועה
-            if (distance > 5) { // מינימום תנועה
-                tankAngle = Math.atan2(dy, dx);
-            }
-        }
-        
-        dpad.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const rect = dpad.getBoundingClientRect();
-            dpadCenter = { 
-                x: rect.left + rect.width / 2, 
-                y: rect.top + rect.height / 2 
-            };
-            updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
-        }, {passive: false});
-
-        dpad.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
-        }, {passive: false});
-
-        dpad.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            stick.style.transform = `translate(-50%, -50%)`;
-            input.x = 0;
-            input.y = 0;
-        });
-
-        fireBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            isFiring = true;
-        }, {passive: false});
-
-        fireBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isFiring = false;
-        });
-        // --- סוף קוד ג'ויסטיק ---
-
-        // --- לולאת הציור ---
-        const GAME_WIDTH = 1000; // הגדרת גודל עולם המשחק
-        const GAME_HEIGHT = 1000;
-
-        function draw() {
-            // התאמת הקנבס לגודל המסך
-            gameCanvas.width = window.innerWidth;
-            gameCanvas.height = window.innerHeight;
-            
-            ctx.fillStyle = "#222"; // צבע רקע למשחק
-            ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
-
-            if (clientState.game_state !== 'playing' || !clientState.players || !myId) {
-                // במצב לובי או המתנה, הקנבס ריק
-                return;
-            }
-            
-            // המצלמה עוקבת אחרי השחקן שלי
-            let camX = 0, camY = 0;
-            if (myId && clientState.players[myId]) {
-                const me = clientState.players[myId];
-                camX = gameCanvas.width / 2 - me.x;
-                camY = gameCanvas.height / 2 - me.y;
-            }
-
-            ctx.save();
-            ctx.translate(camX, camY);
-
-            // ציור גבולות עולם (כדי לראות את הריבאונדים)
-            ctx.strokeStyle = "#444";
-            ctx.strokeRect(0, 0, GAME_WIDTH, GAME_HEIGHT); 
-
-            // ציור קליעים
-            clientState.bullets.forEach(b => {
-                ctx.fillStyle = "yellow";
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // ציור שחקנים
-            for (let pid in clientState.players) {
-                const p = clientState.players[pid];
-                
-                if (!p.alive) {
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; // שחקן מת
-                } else {
-                    ctx.fillStyle = p.color;
-                }
-
+                // גוף הטנק (מלבן מסתובב)
                 ctx.save();
                 ctx.translate(p.x, p.y);
-                
-                // גוף הטנק
-                ctx.beginPath();
-                ctx.arc(0, 0, 15, 0, Math.PI * 2);
-                ctx.fill();
-
-                // קו מתאר (צהוב אם זה אני)
-                if (pid === myId) {
-                    ctx.strokeStyle = "yellow";
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
-                }
-
-                // תותח
                 ctx.rotate(p.angle);
-                ctx.fillStyle = "black";
-                ctx.fillRect(0, -3, 25, 6);
+                
+                // גוף
+                ctx.fillStyle = color;
+                ctx.fillRect(-10, -10, 20, 20);
+                
+                // קנה (L=25)
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(35, 0);
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                
+                // מגדל (מעגל)
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#4b5563';
+                ctx.fill();
 
                 ctx.restore();
                 
-                // שם השחקן
-                ctx.fillStyle = "white";
-                ctx.font = "12px Arial";
-                ctx.textAlign = "center";
+                // שם שחקן
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px Heebo';
                 ctx.fillText(p.name, p.x, p.y - 25);
             }
-
-            ctx.restore();
         }
+    }
 
-        // --- לולאת תקשורת ---
-        function communicationLoop() {
-            if (socket && socket.readyState === WebSocket.OPEN && myId && clientState.game_state === 'playing') {
-                // שליחה רק כשאנחנו במצב משחק
-                const inputMsg = {
-                    "type": "input", 
-                    "dir": input, 
-                    "fire": isFiring,
-                    "angle": tankAngle // שולח את הזווית שהג'ויסטיק קבע
-                };
-                socket.send(JSON.stringify(inputMsg));
-            }
+    // ----------------------------------------------------------------------------------
+    // לוגיקת קלט (Input)
+    // ----------------------------------------------------------------------------------
+    
+    /** עדכון זווית על בסיס מיקום העכבר/טאץ' */
+    function updateAngle(clientX, clientY) {
+        if (!myPlayerId || !gameData.players[myPlayerId]) return;
+        
+        const canvasRect = elements.canvas.getBoundingClientRect();
+        const centerX = canvasRect.left + elements.canvas.width / 2;
+        const centerY = canvasRect.top + elements.canvas.height / 2;
+        
+        // יש למצוא את מיקום הטנק הנוכחי (משוער) בתוך הקנבס
+        // לצורך הפשטות, נשתמש במיקום הטנק המדווח מהשרת
+        const p = gameData.players[myPlayerId];
+        if (!p) return;
+        
+        // מיקום הטנק ב-Viewport
+        const tankX_viewport = canvasRect.left + p.x;
+        const tankY_viewport = canvasRect.top + p.y;
+
+        // חישוב הזווית בין הטנק לנקודת הקליק
+        const dx = clientX - tankX_viewport;
+        const dy = clientY - tankY_viewport;
+        
+        // הזווית ברדיאנים
+        inputState.angle = Math.atan2(dy, dx);
+        sendInput();
+    }
+    
+    /** לולאת שליחת קלט */
+    setInterval(sendInput, 50); // שליחת קלט 20 פעמים בשנייה
+
+    // ----------------------------------------------------------------------------------
+    // Event Listeners ו-Initialisation
+    // ----------------------------------------------------------------------------------
+
+    window.onload = () => {
+        // 1. אתחול Firebase
+        try {
+            firebaseApp = firebase.initializeApp(window.__firebase_config);
+            auth = firebase.getAuth(firebaseApp);
+            db = firebase.getFirestore(firebaseApp);
+            console.log("Firebase initialized.");
             
-            // ציור תמיד
-            draw();
-            requestAnimationFrame(communicationLoop);
+            // 2. בדיקת מצב אימות ראשוני
+            firebase.onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    playerName = await getPlayerName(userId);
+                    
+                    if (!playerName) {
+                        // אם המשתמש מחובר (אולי דרך Custom Token), אך אין שם, נבקש שם
+                        playerName = user.email ? user.email.split('@')[0] : 'Guest';
+                    }
+                    
+                    elements.playerWelcomeName.textContent = playerName;
+                    setAppState('lobby');
+                    connectToServer(playerName);
+
+                } else {
+                    // אין משתמש מחובר - הצג מסך אימות
+                    setAppState('auth');
+                }
+            });
+            
+        } catch (e) {
+            console.error("Failed to initialize Firebase:", e);
+            // אם Firebase נכשל, ננסה להיכנס כאנונימי ללא אימות
+            setAppState('auth');
         }
 
-        // --- התחלה ---
-        // מתחילים במסך כניסה
-        switchScreen('login'); 
-        communicationLoop(); // מריץ את לולאת הציור והשליחה
-    </script>
+
+        // 3. אירועי טופס אימות (כניסה/הרשמה)
+        elements.authForm.addEventListener('submit', handleAuth);
+        
+        // מעבר בין כניסה להרשמה
+        elements.toggleAuthBtn.addEventListener('click', () => {
+            isRegisterMode = !isRegisterMode;
+            elements.authTitle.textContent = isRegisterMode ? 'הרשמת משתמש חדש' : 'כניסת משתמש קיים';
+            elements.authSubmitBtn.textContent = isRegisterMode ? 'הרשמה ומשחק' : 'התחבר';
+            elements.toggleAuthBtn.textContent = isRegisterMode ? 'יש לך חשבון? לחץ כאן לכניסה' : 'אין לך חשבון? לחץ כאן להרשמה';
+            elements.authError.classList.add('hidden');
+        });
+
+        // 4. אירועי לובי
+        elements.startGameBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "request_start_game" }));
+            }
+        });
+        
+        elements.logoutBtn.addEventListener('click', handleLogout);
+        elements.backTo_lobbyBtn.addEventListener('click', () => setAppState('lobby'));
+
+
+        // 5. אירועי קלט (Game)
+        
+        // לחצני ג'ויסטיק
+        elements.upBtn.addEventListener('mousedown', () => { inputState.y = -1; });
+        elements.downBtn.addEventListener('mousedown', () => { inputState.y = 1; });
+        elements.leftBtn.addEventListener('mousedown', () => { inputState.x = -1; inputState.angle -= 0.1; }); // סיבוב קל עם תזוזה
+        elements.rightBtn.addEventListener('mousedown', () => { inputState.x = 1; inputState.angle += 0.1; });
+
+        // Touchstart/Touchend עבור מובייל
+        elements.upBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.y = -1; });
+        elements.downBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.y = 1; });
+        elements.leftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.x = -1; inputState.angle -= 0.1; });
+        elements.rightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.x = 1; inputState.angle += 0.1; });
+
+        // איפוס תנועה
+        document.querySelectorAll('#joystick-container button').forEach(btn => {
+            btn.addEventListener('mouseup', () => { inputState.x = 0; inputState.y = 0; });
+            btn.addEventListener('touchend', () => { inputState.x = 0; inputState.y = 0; });
+            btn.addEventListener('mouseout', () => { inputState.x = 0; inputState.y = 0; });
+        });
+        
+        // ירי
+        elements.fireBtn.addEventListener('click', () => { inputState.fire = true; sendInput(); });
+        elements.fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); inputState.fire = true; sendInput(); });
+        
+        // סיבוב על ידי עכבר/טאץ' על הקנבס
+        elements.canvas.addEventListener('mousemove', (e) => {
+            if (appState === 'game') updateAngle(e.clientX, e.clientY);
+        });
+        elements.canvas.addEventListener('click', (e) => {
+            if (appState === 'game') {
+                updateAngle(e.clientX, e.clientY); // עדכון זווית לפני ירי
+                inputState.fire = true; 
+                sendInput();
+            }
+        });
+
+        // קלט מקלדת
+        document.addEventListener('keydown', (e) => {
+            if (appState === 'game') {
+                switch (e.key) {
+                    case 'w':
+                    case 'W':
+                    case 'ArrowUp':
+                        inputState.y = -1; break;
+                    case 's':
+                    case 'S':
+                    case 'ArrowDown':
+                        inputState.y = 1; break;
+                    case 'a':
+                    case 'A':
+                    case 'ArrowLeft':
+                        inputState.x = -1; break;
+                    case 'd':
+                    case 'D':
+                    case 'ArrowRight':
+                        inputState.x = 1; break;
+                    case ' ': // Spacebar for fire
+                        inputState.fire = true; sendInput(); break;
+                }
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+             if (appState === 'game') {
+                switch (e.key) {
+                    case 'w':
+                    case 'W':
+                    case 'ArrowUp':
+                    case 's':
+                    case 'S':
+                    case 'ArrowDown':
+                        inputState.y = 0; break;
+                    case 'a':
+                    case 'A':
+                    case 'ArrowLeft':
+                    case 'd':
+                    case 'D':
+                    case 'ArrowRight':
+                        inputState.x = 0; break;
+                }
+            }
+        });
+    };
+</script>
 </body>
 </html>
