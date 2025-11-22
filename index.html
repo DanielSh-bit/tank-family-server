@@ -85,6 +85,54 @@
             </button>
         </div>
     </div>
+	
+		<!-- מסך בחירת צבע (בין Login ללובי) -->
+	<div id="color-select-screen"
+		 class="hidden flex flex-col items-center justify-center p-4"
+		 style="min-height: 100vh;">
+
+		<h1 class="text-3xl font-bold text-white mb-4">בחר צבע לטנק שלך</h1>
+
+		<!-- כאן ימוקם גלגל הצבעים בשלב הבא -->
+		<div id="color-wheel" class="relative w-64 h-64"></div>
+
+		<p id="color-error" class="text-red-400 mt-4 hidden">עליך לבחור צבע</p>
+
+		<button id="confirm-color-btn"
+				class="mt-6 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg text-xl">
+			המשך
+		</button>
+	</div>
+
+	<!-- ====================== -->
+	<!-- מסך לובי (מוחבא בהתחלה) -->
+	<!-- ====================== -->
+
+	
+
+	<!-- מסך הלובי -->
+	<div id="lobby-screen"
+		 class="hidden flex flex-col items-center justify-between p-4 w-full h-full"
+		 style="min-height: 100vh; background-size: cover; background-position: center;">
+
+		<!-- אזור סטטיסטיקות (שמאל) -->
+		<div class="absolute left-4 top-4 bg-white bg-opacity-80 p-4 rounded-lg shadow-lg text-black w-48">
+			<h2 class="text-xl font-bold mb-2" id="lobby-username">שחקן</h2>
+
+			<p class="text-md"><b>ניצחונות:</b> <span id="stat-wins">0</span></p>
+			<p class="text-md"><b>הריגות:</b> <span id="stat-kills">0</span></p>
+			<p class="text-md"><b>זמן משחק:</b> <span id="stat-time">0</span> שנ'</p>
+		</div>
+
+		<!-- כפתור PLAY (למטה ימין) -->
+		<button id="play-btn"
+				class="absolute bottom-10 right-10 px-10 py-5 text-2xl font-bold rounded-xl shadow-xl 
+					   bg-gray-500 text-white cursor-not-allowed transition">
+			מחכה לשחקנים...
+		</button>
+
+	</div>
+
 
     <!-- ממשק לאחר כניסה (Dashboard) -->
     <div id="dashboard" class="w-full max-w-md p-8 md:p-10 rounded-xl hidden">
@@ -109,6 +157,8 @@
 
     <script>
         // הגדרת משתנים גלובליים
+		let ws = null;
+
         let users = [];
         let isRegisterMode = false;
         let loggedInUser = null;
@@ -224,25 +274,42 @@
             toggleMode();
         }
 
-        /**
-         * מטפל בתהליך הכניסה.
-         * @param {string} username - שם המשתמש.
-         * @param {string} password - הסיסמה.
-         */
-        function handleLogin(username, password) {
-            const user = users.find(u => u.username === username && u.password === password);
+		/**
+		 * מטפל בתהליך הכניסה.
+		 * @param {string} username - שם המשתמש.
+		 * @param {string} password - הסיסמה.
+		 */
+		function showColorSelectScreen() {
+			authContainer.classList.add("hidden");
+			dashboard.classList.add("hidden");
 
-            if (user) {
-                // כניסה מוצלחת
-                loggedInUser = username;
-                localStorage.setItem(SESSION_STORAGE_KEY, username);
-                displayMessage('התחברת בהצלחה!', 'success');
-                renderView();
-            } else {
-                // כניסה נכשלה
-                displayMessage('שם משתמש או סיסמה שגויים.', 'error');
-            }
-        }
+			const screen = document.getElementById("color-select-screen");
+			screen.classList.remove("hidden");
+
+			buildColorWheel(); // ← כאן
+		}
+
+
+		function handleLogin(username, password) {
+			const user = users.find(u => u.username === username && u.password === password);
+
+			if (user) {
+				loggedInUser = username;
+				localStorage.setItem(SESSION_STORAGE_KEY, username);
+
+				displayMessage('התחברת בהצלחה!', 'success');
+
+				// מעבר למסך בחירת הצבע
+				setTimeout(() => {
+					showColorSelectScreen();
+				}, 500);
+
+			} else {
+				// כניסה נכשלה
+				displayMessage('שם משתמש או סיסמה שגויים.', 'error');
+			}
+		}
+
 
         /**
          * מטפל ביציאה מהמערכת.
@@ -282,6 +349,13 @@
          * טוען נתונים ומאתחל את האפליקציה.
          */
         function init() {
+
+			ws = new WebSocket("wss://tank-family-server.onrender.com/ws");
+
+			ws.onopen = () => {
+				console.log("WS connected");
+				setupWebSocketHandlers();
+			};
             // 1. טעינת נתוני המשתמשים
             loadUsers();
 
@@ -317,7 +391,149 @@
 
         // הפעלת האפליקציה לאחר טעינת כל האלמנטים
         window.onload = init;
+		
+		// --- רשימת הצבעים האפשריים ---
+		// חייב להתאים לרשימה בשרת!
+		const COLOR_LIST = ["red","green","pink","blue","black","yellow"];
 
+		// צבע שנבחר ע"י המשתמש
+		let selectedColor = null;
+
+		// בניית גלגל הצבעים
+		function buildColorWheel() {
+			const wheel = document.getElementById("color-wheel");
+			wheel.innerHTML = ""; // ניקוי קודם
+
+			COLOR_LIST.forEach(color => {
+				const btn = document.createElement("div");
+				btn.className =
+					"w-16 h-16 rounded-full cursor-pointer border-4 border-white shadow-lg transition transform";
+				btn.style.backgroundColor = color;
+
+				btn.onclick = () => {
+					selectedColor = color;
+
+					// הסרת הדגשה מכל הצבעים
+					document.querySelectorAll("#color-wheel div").forEach(b => {
+						b.style.transform = "scale(1)";
+						b.style.borderColor = "white";
+					});
+
+					// הדגשת הצבע שנבחר
+					btn.style.transform = "scale(1.2)";
+					btn.style.borderColor = "black";
+
+					// הסתרת הודעת שגיאה אם הייתה
+					document.getElementById("color-error").classList.add("hidden");
+				};
+
+				wheel.appendChild(btn);
+			});
+		}
+
+		document.getElementById("confirm-color-btn").onclick = () => {
+			if (!selectedColor) {
+				document.getElementById("color-error").classList.remove("hidden");
+				return;
+			}
+
+			ws.send(JSON.stringify({
+				type: "join",
+				username: loggedInUser,
+				color: selectedColor
+			}));
+		};
+
+		function showLobbyScreen(joinMsg) {
+			// החביאו את כל שאר המסכים
+			authContainer.classList.add("hidden");
+			dashboard.classList.add("hidden");
+			document.getElementById("color-select-screen").classList.add("hidden");
+
+			const lobby = document.getElementById("lobby-screen");
+			lobby.classList.remove("hidden");
+
+			// 1. רקע הלובי לפי הצבע
+			const color = joinMsg.color;          // הצבע שבחרת
+			const bgPath = `loby_${color}.png`;   // לדוגמה: loby_red.png
+
+			lobby.style.backgroundImage = `url('${bgPath}')`;
+
+			// 2. סטטיסטיקות לידי שמאל
+			document.getElementById("lobby-username").textContent = joinMsg.name;
+			document.getElementById("stat-wins").textContent = joinMsg.stats.wins;
+			document.getElementById("stat-kills").textContent = joinMsg.stats.kills;
+			document.getElementById("stat-time").textContent = Math.floor(joinMsg.stats.play_time);
+
+			// 3. שמירת ה-ID של השחקן
+			window.PLAYER_ID = joinMsg.id;
+			window.PLAYER_COLOR = joinMsg.color;
+
+			// 4. ניהול כפתור PLAY
+			const playBtn = document.getElementById("play-btn");
+			playBtn.disabled = true; 
+			playBtn.style.cursor = "not-allowed";
+			playBtn.textContent = "מחכה לשחקנים...";
+
+			// שליחת בקשה להתחיל משחק רק אם יש מספיק שחקנים
+			playBtn.onclick = () => {
+				ws.send(JSON.stringify({ type: "request_start_game" }));
+			};
+
+			// 5. נתחיל לקלוט lobby_state מהשרת (זה יופיע ב ws.onmessage)
+		}
+
+		// כל הודעה שמגיעה מהשרת תעבור כאן
+		function setupWebSocketHandlers() {
+
+			ws.onmessage = (event) => {
+				const msg = JSON.parse(event.data);
+				console.log("WS message:", msg);
+
+				// 1. אישור הצטרפות (JOINED)
+				if (msg.type === "joined") {
+					showLobbyScreen(msg);
+				}
+
+				// 2. עדכון לובי
+				if (msg.type === "lobby_state") {
+					updateLobbyUI(msg);
+				}
+
+				// 3. תחילת משחק
+				if (msg.type === "start_game") {
+					console.log("GAME START!", msg);
+					// כאן בהמשך תעבור למסך המשחק עצמו
+				}
+
+				// 4. הודעת שגיאה
+				if (msg.type === "error") {
+					alert(msg.message);
+				}
+			};
+		}
+
+
+		function updateLobbyUI(state) {
+			const playBtn = document.getElementById("play-btn");
+			const num = state.num_players;
+
+			if (num < 2) {
+				playBtn.disabled = true;
+				playBtn.textContent = "מחכה לשחקנים...";
+				playBtn.style.backgroundColor = "gray";
+				return;
+			}
+
+			playBtn.disabled = false;
+			playBtn.textContent = "PLAY";
+			playBtn.style.backgroundColor = "green";
+		}
+
+		// -------- WebSocket --------
+
+
+		
     </script>
 </body>
 </html>

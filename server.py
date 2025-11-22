@@ -417,12 +417,31 @@ async def handle_login(ws, data):
 async def handle_join(ws, data, username, stats):
     """מטפל בבקשת הצטרפות ללובי לאחר כניסה מוצלחת."""
 
+    # --- הגבלת 6 שחקנים ---
+    if len(players) >= 6:
+        await send_error(ws, "too_many_players", "הלובי מלא (מקסימום 6 שחקנים).")
+        return None
+
     # יצירת מזהה ייחודי לשחקן
     player_id = str(random.randint(10000, 99999))
     while player_id in players:
         player_id = str(random.randint(10000, 99999))
 
-    player_color = get_available_color()
+    requested_color = data.get("color")
+
+    # אם הלקוח שלח צבע → נבדוק שהוא פנוי
+    if requested_color:
+        used_colors = {p.color for p in players.values()}
+        if requested_color in used_colors:
+            await send_error(ws, "color_taken", "הצבע כבר תפוס.")
+            return None
+        if requested_color not in AVAILABLE_COLORS:
+            await send_error(ws, "invalid_color", "צבע לא חוקי.")
+            return None
+        player_color = requested_color
+    else:
+        # אם לא ביקש → נבחר אוטומטית
+        player_color = get_available_color()
 
     # יצירת אובייקט שחקן עם הסטטיסטיקות שנטענו
     players[player_id] = Player(player_id, username, player_color, initial_stats=stats)
